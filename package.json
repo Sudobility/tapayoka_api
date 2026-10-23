@@ -1,6 +1,6 @@
 {
   "name": "tapayoka_api",
-  "version": "0.0.65",
+  "version": "0.0.66",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -48,6 +48,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/johnqh/tapayoka_api.git"
+    "url": "https://github.com/Sudobility/tapayoka_api.git"
   }
 }
