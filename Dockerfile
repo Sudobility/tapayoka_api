@@ -2,8 +2,7 @@ FROM --platform=${BUILDPLATFORM} oven/bun:latest
 ARG TARGETPLATFORM
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG NPM_TOKEN
-
+ARG GH_PACKAGES_TOKEN
 # Build information
 RUN printf "I'm building for TARGETPLATFORM=${TARGETPLATFORM}" \
     && printf ", TARGETARCH=${TARGETARCH}" \
@@ -35,8 +34,8 @@ RUN groupadd -g 1001 appuser && \
 COPY package.json bun.lock* bunfig.toml* ./
 
 # Setup npm authentication for private packages
-RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc && \
-    echo "@sudobility:registry=https://registry.npmjs.org/" >> ~/.npmrc
+RUN echo "@sudobility:registry=https://npm.pkg.github.com" > ~/.npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}" >> ~/.npmrc
 
 # Install dependencies
 RUN bun install --production && \
