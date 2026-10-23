@@ -123,8 +123,7 @@ function evaluateOperating(
 
   const parts = formatter.formatToParts(now);
   const weekday = parts.find(p => p.type === "weekday")?.value as
-    | DayOfWeek
-    | undefined;
+    DayOfWeek | undefined;
   const hour = parts.find(p => p.type === "hour")?.value ?? "00";
   const minute = parts.find(p => p.type === "minute")?.value ?? "00";
   const currentTime = `${hour}:${minute}`;

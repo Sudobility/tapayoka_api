@@ -1,6 +1,6 @@
 {
   "name": "tapayoka_api",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -36,7 +36,7 @@
     "@hono/zod-validator": "^0.7.5",
     "@sudobility/auth_service": "^1.1.27",
     "@sudobility/entity_service": "^1.0.47",
-    "@sudobility/tapayoka_types": "^0.0.56",
+    "@sudobility/tapayoka_types": "^0.0.57",
     "@sudobility/types": "^1.9.74",
     "drizzle-orm": "^0.45.0",
     "ethers": "^6.13.0",
