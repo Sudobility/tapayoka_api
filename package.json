@@ -1,6 +1,6 @@
 {
   "name": "tapayoka_api",
-  "version": "0.0.64",
+  "version": "0.0.65",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -20,7 +20,7 @@
     "test:db": "vitest run --config vitest.db.config.ts"
   },
   "devDependencies": {
-    "@sudobility/test-db-guard": "1.0.2",
+    "@sudobility/test-db-guard": "^1.0.3",
     "@types/bun": "latest",
     "@types/node": "^24.10.1",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
@@ -34,10 +34,10 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
-    "@sudobility/auth_service": "^1.1.22",
-    "@sudobility/entity_service": "^1.0.42",
-    "@sudobility/tapayoka_types": "^0.0.54",
-    "@sudobility/types": "^1.9.68",
+    "@sudobility/auth_service": "^1.1.27",
+    "@sudobility/entity_service": "^1.0.47",
+    "@sudobility/tapayoka_types": "^0.0.56",
+    "@sudobility/types": "^1.9.74",
     "drizzle-orm": "^0.45.0",
     "ethers": "^6.13.0",
     "firebase-admin": "^13.6.0",

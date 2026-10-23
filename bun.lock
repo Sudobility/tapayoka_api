@@ -6,10 +6,10 @@
       "name": "tapayoka_api",
       "dependencies": {
         "@hono/zod-validator": "^0.7.5",
-        "@sudobility/auth_service": "^1.1.22",
-        "@sudobility/entity_service": "^1.0.42",
-        "@sudobility/tapayoka_types": "^0.0.54",
-        "@sudobility/types": "^1.9.68",
+        "@sudobility/auth_service": "^1.1.27",
+        "@sudobility/entity_service": "^1.0.47",
+        "@sudobility/tapayoka_types": "^0.0.56",
+        "@sudobility/types": "^1.9.74",
         "drizzle-orm": "^0.45.0",
         "ethers": "^6.13.0",
         "firebase-admin": "^13.6.0",
@@ -19,7 +19,7 @@
         "zod": "^3.24.0",
       },
       "devDependencies": {
-        "@sudobility/test-db-guard": "1.0.2",
+        "@sudobility/test-db-guard": "^1.0.3",
         "@types/bun": "latest",
         "@types/node": "^24.10.1",
         "@typescript-eslint/eslint-plugin": "^8.50.0",
@@ -240,15 +240,15 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@sudobility/auth_service": ["@sudobility/auth_service@1.1.22", "", { "peerDependencies": { "@sudobility/types": "^1.9.68", "firebase-admin": "^13.0.0" } }, "sha512-og3L/cK/XKidiONCepkCk9CTw1unmna4ASeXJjldWpeJNFArUwxw0gi/Smr7Csok4D4u6gK9J4p+dWFSZfBo0g=="],
+    "@sudobility/auth_service": ["@sudobility/auth_service@1.1.27", "https://npm.pkg.github.com/download/@sudobility/auth_service/1.1.27/4452ec62188db85520baa06feb8d37598e9b48e8", { "peerDependencies": { "@sudobility/types": "^1.9.74", "firebase-admin": "^13.0.0" } }, "sha512-SnrSgD+3qk5dnSu9tRTX8bWdbXHMKKtHmlWRIGQ9uLpxdyS58CLCJSrJhwJuAwCl/7a7JZPa2nu8bSN+2+bz/A=="],
 
-    "@sudobility/entity_service": ["@sudobility/entity_service@1.0.42", "", { "peerDependencies": { "@sudobility/types": "^1.9.68", "drizzle-orm": "^0.45.0", "hono": "^4.0.0" } }, "sha512-D72XFh7pXgEOYmFJrscbk/r3SJxp7Nmg1eWmoqVEb7CH1jsOx5YMSgzwu1A8+sy+oSCkPKc7wL1ZqF/pASM2eg=="],
+    "@sudobility/entity_service": ["@sudobility/entity_service@1.0.47", "https://npm.pkg.github.com/download/@sudobility/entity_service/1.0.47/16c7c9c43f7a69ea9b27a7929b7760e0d4645931", { "peerDependencies": { "@sudobility/types": "^1.9.74", "drizzle-orm": "^0.45.0", "hono": "^4.0.0" } }, "sha512-yZTvR4gKFDXwpl4oDcf/5x78PAI+P+vZyTg2bQ4xwkN65AfDdKMZ6DzgSHK1VzfyGzV1WgawcGzd6wcrI2mBNA=="],
 
-    "@sudobility/tapayoka_types": ["@sudobility/tapayoka_types@0.0.54", "", { "peerDependencies": { "@sudobility/types": "^1.9.68" } }, "sha512-PMfvuYRkglkBvRCRMgHhH7pXAk2SyRXVUGmpZd3EV0BOGaA+FYhQ93u09QZiJMsSknrPhUYv+12g1358iXCWpQ=="],
+    "@sudobility/tapayoka_types": ["@sudobility/tapayoka_types@0.0.56", "https://npm.pkg.github.com/download/@sudobility/tapayoka_types/0.0.56/c52eeb944e8738ca28ebcc6e66a20ff7e8a7c68c", { "peerDependencies": { "@sudobility/types": "^1.9.74" } }, "sha512-hg2fCyk8PlqupEpSHMrcCASfaqBctoc7/Bk2NNgBQEroNoTLu38TnxMXXRFDZwv9+VaMLpEDU2MbpYNPccAbfQ=="],
 
-    "@sudobility/test-db-guard": ["@sudobility/test-db-guard@1.0.2", "", {}, "sha512-MFvX5e3VMprZLAw8iQIIfqZhy2Sod/wE6ytHBjMJHEE+IKHNSe9qPkXu6QpmZYVvwIOW7vOc84q0XkkKkF49Tw=="],
+    "@sudobility/test-db-guard": ["@sudobility/test-db-guard@1.0.3", "https://npm.pkg.github.com/download/@sudobility/test-db-guard/1.0.3/1b60364ccb30369e4ddc9a005ffdf03ea2644a65", {}, "sha512-VLYACu7PMDG4hqO9g5y/E0NOgDNS5HnG+UU/jr5Po0S5zrZv80i51rxwC2sOVX8gbyR04s632OoMULFiju4aZw=="],
 
-    "@sudobility/types": ["@sudobility/types@1.9.68", "", {}, "sha512-4LL5+UfcqQcc0PKKR/z/PqS6j9DQPVkkjL+3oOW+Bwx0TAu1SVKAlPhlt/9ruNMW+abcHuZoFvbOVD5gdYBSGw=="],
+    "@sudobility/types": ["@sudobility/types@1.9.74", "https://npm.pkg.github.com/download/@sudobility/types/1.9.74/f9ad864ba5d8d1097e7e48378ebee8aa7e129e88", {}, "sha512-jgt0F1r71qjFNiRNn/1YlL4JU65sjnzYd8Sfi+Y9z62Lu9VhIXeqWAH12u7/hmGPZqG3nxzn0V+s3sFkB1qWuQ=="],
 
     "@tootallnate/once": ["@tootallnate/once@2.0.0", "", {}, "sha512-XCuKFP5PS55gnMVu3dty8KPatLqUoy/ZYzDzAGCQ8JNFCkLXzmI7vNHCR+XpbZaMWQK/vQubr7PkYq8g470J/A=="],
 
