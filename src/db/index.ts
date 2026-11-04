@@ -36,6 +36,31 @@ export async function initDatabase() {
   // Create schema if not exists
   await connection`CREATE SCHEMA IF NOT EXISTS tapayoka`;
 
+  // --- Installation → Device rename (preserve data on existing DBs) ---
+  // Run BEFORE the CREATE TABLE IF NOT EXISTS statements below so existing rows
+  // are renamed in place rather than orphaned behind a fresh empty table. Each
+  // is idempotent: ALTER ... IF EXISTS no-ops on a fresh DB or a second run.
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_installations RENAME TO vendor_devices; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_installation_slots RENAME TO vendor_device_slots; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_device_slots RENAME COLUMN installation_wallet_address TO device_wallet_address; EXCEPTION WHEN undefined_column OR undefined_table OR duplicate_column THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER INDEX IF EXISTS tapayoka.vendor_installations_offering_idx RENAME TO vendor_devices_offering_idx; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER INDEX IF EXISTS tapayoka.vendor_installation_slots_installation_idx RENAME TO vendor_device_slots_device_idx; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  // Normalize the vendor_devices → vendor_offerings FK name carried over from the
+  // old table name, so it matches what the create path below expects.
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_devices RENAME CONSTRAINT vendor_installations_vendor_offering_id_fkey TO vendor_devices_vendor_offering_id_fkey; EXCEPTION WHEN undefined_object OR undefined_table OR duplicate_object THEN NULL; END $$;
+  `);
+
   // Create enums
   const enumDefs = [
     {
@@ -215,7 +240,7 @@ export async function initDatabase() {
   `;
 
   await connection`
-    CREATE TABLE IF NOT EXISTS tapayoka.vendor_installations (
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_devices (
       wallet_address VARCHAR(42) PRIMARY KEY NOT NULL,
       vendor_offering_id UUID NOT NULL REFERENCES tapayoka.vendor_offerings(id),
       label VARCHAR(255) NOT NULL,
@@ -255,9 +280,9 @@ export async function initDatabase() {
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE tapayoka.orders RENAME COLUMN service_id TO offering_id; EXCEPTION WHEN undefined_column OR duplicate_column THEN NULL; END $$;
   `);
-  // Legacy orders column installation_id → offering_id (equipment→installation→offering churn)
+  // Legacy orders column device_id → offering_id (equipment→device→offering churn)
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.orders RENAME COLUMN installation_id TO offering_id; EXCEPTION WHEN undefined_column OR duplicate_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.orders RENAME COLUMN device_id TO offering_id; EXCEPTION WHEN undefined_column OR duplicate_column THEN NULL; END $$;
   `);
 
   // Rename vendor tables
@@ -271,18 +296,18 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_service_controls RENAME TO vendor_offering_controls; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
   `);
 
-  // Rename vendor_equipments → vendor_installations
-  // Drop stale vendor_installations if it has the wrong schema (leftover from previous renames)
+  // Rename vendor_equipments → vendor_devices
+  // Drop stale vendor_devices if it has the wrong schema (leftover from previous renames)
   await connection.unsafe(`
     DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'tapayoka' AND table_name = 'vendor_installations' AND column_name = 'id')
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'tapayoka' AND table_name = 'vendor_devices' AND column_name = 'id')
          AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'tapayoka' AND table_name = 'vendor_equipments') THEN
-        DROP TABLE tapayoka.vendor_installations CASCADE;
+        DROP TABLE tapayoka.vendor_devices CASCADE;
       END IF;
     END $$;
   `);
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_equipments RENAME TO vendor_installations; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_equipments RENAME TO vendor_devices; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
   `);
 
   // Add type column to vendor_models (nullable)
@@ -352,32 +377,32 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_offering_controls RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column OR undefined_table THEN NULL; END $$;
   `);
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_devices RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
-  // Rename installation columns to offering columns (installation→offering rename)
+  // Rename device columns to offering columns (device→offering rename)
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_installation_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_devices RENAME COLUMN vendor_device_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
-  // Rename equipment columns to offering columns (equipment→installation rename)
+  // Rename equipment columns to offering columns (equipment→device rename)
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_equipment_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_devices RENAME COLUMN vendor_equipment_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
 
   // Fix stale FK: vendor_equipments_vendor_service_id_fkey still points at vendor_services
   await connection.unsafe(`
     DO $$ BEGIN
-      ALTER TABLE tapayoka.vendor_installations DROP CONSTRAINT IF EXISTS vendor_equipments_vendor_service_id_fkey;
-      ALTER TABLE tapayoka.vendor_installations DROP CONSTRAINT IF EXISTS vendor_equipments_vendor_offering_id_fkey;
-      ALTER TABLE tapayoka.vendor_installations
-        ADD CONSTRAINT vendor_installations_vendor_offering_id_fkey
+      ALTER TABLE tapayoka.vendor_devices DROP CONSTRAINT IF EXISTS vendor_equipments_vendor_service_id_fkey;
+      ALTER TABLE tapayoka.vendor_devices DROP CONSTRAINT IF EXISTS vendor_equipments_vendor_offering_id_fkey;
+      ALTER TABLE tapayoka.vendor_devices
+        ADD CONSTRAINT vendor_devices_vendor_offering_id_fkey
         FOREIGN KEY (vendor_offering_id) REFERENCES tapayoka.vendor_offerings(id);
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   `);
 
-  // Rename vendor_installations.name → label
+  // Rename vendor_devices.name → label
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN name TO label; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_devices RENAME COLUMN name TO label; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
 
   // Add slot enum + column to vendor_models
@@ -458,11 +483,11 @@ export async function initDatabase() {
     END $$;
   `);
 
-  // Create vendor_installation_slots table
+  // Create vendor_device_slots table
   await connection`
-    CREATE TABLE IF NOT EXISTS tapayoka.vendor_installation_slots (
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_device_slots (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      installation_wallet_address VARCHAR(42) NOT NULL REFERENCES tapayoka.vendor_installations(wallet_address) ON DELETE CASCADE,
+      device_wallet_address VARCHAR(42) NOT NULL REFERENCES tapayoka.vendor_devices(wallet_address) ON DELETE CASCADE,
       label VARCHAR(255) NOT NULL,
       "row" VARCHAR(50),
       "column" VARCHAR(50),
@@ -471,22 +496,22 @@ export async function initDatabase() {
       pricing_tier JSONB,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW(),
-      UNIQUE(installation_wallet_address, label)
+      UNIQUE(device_wallet_address, label)
     )
   `;
-  await connection`CREATE INDEX IF NOT EXISTS vendor_installation_slots_installation_idx ON tapayoka.vendor_installation_slots(installation_wallet_address)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_device_slots_device_idx ON tapayoka.vendor_device_slots(device_wallet_address)`;
 
-  // Add slot_id column to orders (references vendor_installation_slots)
-  await connection`ALTER TABLE tapayoka.orders ADD COLUMN IF NOT EXISTS slot_id UUID REFERENCES tapayoka.vendor_installation_slots(id) ON DELETE SET NULL`;
+  // Add slot_id column to orders (references vendor_device_slots)
+  await connection`ALTER TABLE tapayoka.orders ADD COLUMN IF NOT EXISTS slot_id UUID REFERENCES tapayoka.vendor_device_slots(id) ON DELETE SET NULL`;
 
   // Per-slot relay behaviour (SlotAction) for multi-slot models. No backfill
   // needed: single-slot models keep the action on the tier, and the API derives
   // a SlotAction from a tier's legacy pinNumber/signals when this is null.
-  await connection`ALTER TABLE tapayoka.vendor_installation_slots ADD COLUMN IF NOT EXISTS action JSONB`;
+  await connection`ALTER TABLE tapayoka.vendor_device_slots ADD COLUMN IF NOT EXISTS action JSONB`;
 
-  // Add pricing_tier_id and pricing_tier columns to vendor_installations
-  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
-  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier JSONB`;
+  // Add pricing_tier_id and pricing_tier columns to vendor_devices
+  await connection`ALTER TABLE tapayoka.vendor_devices ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
+  await connection`ALTER TABLE tapayoka.vendor_devices ADD COLUMN IF NOT EXISTS pricing_tier JSONB`;
 
   // Migrate vendor_offerings: add pricing JSONB, migrate existing data, drop old columns
   await connection.unsafe(`
@@ -517,8 +542,8 @@ export async function initDatabase() {
   await connection`ALTER TABLE tapayoka.vendor_locations ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
   await connection`ALTER TABLE tapayoka.vendor_offerings ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
-  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
-  await connection`ALTER TABLE tapayoka.vendor_installation_slots ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+  await connection`ALTER TABLE tapayoka.vendor_devices ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+  await connection`ALTER TABLE tapayoka.vendor_device_slots ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
 
   // --- Move schedule from vendor_models to vendor_offerings ---
   await connection`ALTER TABLE tapayoka.vendor_offerings ADD COLUMN IF NOT EXISTS schedule JSONB`;
@@ -533,30 +558,30 @@ export async function initDatabase() {
     ALTER TABLE tapayoka.vendor_models DROP COLUMN IF EXISTS schedule
   `);
 
-  // --- Single-slot migration: auto-create slot for single-slot installations without slots ---
+  // --- Single-slot migration: auto-create slot for single-slot devices without slots ---
   await connection.unsafe(`
-    INSERT INTO tapayoka.vendor_installation_slots (installation_wallet_address, label, sort_order, pricing_tier_id, pricing_tier)
+    INSERT INTO tapayoka.vendor_device_slots (device_wallet_address, label, sort_order, pricing_tier_id, pricing_tier)
     SELECT vi.wallet_address, vi.label, 0, vi.pricing_tier_id, vi.pricing_tier
-    FROM tapayoka.vendor_installations vi
+    FROM tapayoka.vendor_devices vi
     JOIN tapayoka.vendor_offerings vo ON vo.id = vi.vendor_offering_id
     JOIN tapayoka.vendor_models vm ON vm.id = vo.vendor_model_id
     WHERE (vm.slot = 'single' OR vm.slot IS NULL)
       AND NOT EXISTS (
-        SELECT 1 FROM tapayoka.vendor_installation_slots vis
-        WHERE vis.installation_wallet_address = vi.wallet_address
+        SELECT 1 FROM tapayoka.vendor_device_slots vis
+        WHERE vis.device_wallet_address = vi.wallet_address
       )
   `);
 
-  // Drop pricing columns from vendor_installations (now lives on slots)
+  // Drop pricing columns from vendor_devices (now lives on slots)
   await connection.unsafe(
-    `ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier_id`
+    `ALTER TABLE tapayoka.vendor_devices DROP COLUMN IF EXISTS pricing_tier_id`
   );
   await connection.unsafe(
-    `ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier`
+    `ALTER TABLE tapayoka.vendor_devices DROP COLUMN IF EXISTS pricing_tier`
   );
 
-  // Add connection_string to vendor_installations
-  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS connection_string TEXT`;
+  // Add connection_string to vendor_devices
+  await connection`ALTER TABLE tapayoka.vendor_devices ADD COLUMN IF NOT EXISTS connection_string TEXT`;
 
   // Rename vendor_model_pricing 'timed' → 'variable'
   await connection.unsafe(`
@@ -584,31 +609,31 @@ export async function initDatabase() {
   await connection`ALTER TABLE tapayoka.users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)`;
 
   // Repoint device_wallet_address FKs from the legacy (empty) devices table to
-  // vendor_installations — the table the app actually provisions and validates
+  // vendor_devices — the table the app actually provisions and validates
   // against. DROP IF EXISTS + ADD makes this idempotent across restarts.
   await connection`ALTER TABLE tapayoka.orders DROP CONSTRAINT IF EXISTS orders_device_wallet_address_fkey`;
-  await connection`ALTER TABLE tapayoka.orders ADD CONSTRAINT orders_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_installations(wallet_address)`;
+  await connection`ALTER TABLE tapayoka.orders ADD CONSTRAINT orders_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_devices(wallet_address)`;
   await connection`ALTER TABLE tapayoka.device_logs DROP CONSTRAINT IF EXISTS device_logs_device_wallet_address_fkey`;
-  await connection`ALTER TABLE tapayoka.device_logs ADD CONSTRAINT device_logs_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_installations(wallet_address)`;
+  await connection`ALTER TABLE tapayoka.device_logs ADD CONSTRAINT device_logs_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_devices(wallet_address)`;
   await connection`ALTER TABLE tapayoka.device_offerings DROP CONSTRAINT IF EXISTS device_offerings_device_wallet_address_fkey`;
-  await connection`ALTER TABLE tapayoka.device_offerings ADD CONSTRAINT device_offerings_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_installations(wallet_address) ON DELETE CASCADE`;
+  await connection`ALTER TABLE tapayoka.device_offerings ADD CONSTRAINT device_offerings_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_devices(wallet_address) ON DELETE CASCADE`;
 
-  // --- Drop orphan legacy tables (leftovers from service→installation→offering renames) ---
+  // --- Drop orphan legacy tables (leftovers from service→device→offering renames) ---
   // First drop the stale FK on the live orders table that still points at the legacy
   // "services" table (carried over from the old service_id column); otherwise DROP fails.
   await connection`ALTER TABLE tapayoka.orders DROP CONSTRAINT IF EXISTS orders_service_id_fkey`;
   // CASCADE clears the remaining inter-orphan FKs.
-  await connection`DROP TABLE IF EXISTS tapayoka.device_installations CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.device_devices CASCADE`;
   await connection`DROP TABLE IF EXISTS tapayoka.device_services CASCADE`;
-  await connection`DROP TABLE IF EXISTS tapayoka.vendor_installation_controls CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.vendor_device_controls CASCADE`;
   await connection`DROP TABLE IF EXISTS tapayoka.vendor_offering_controls CASCADE`;
   await connection`DROP TABLE IF EXISTS tapayoka.vendor_service_controls CASCADE`;
   await connection`DROP TABLE IF EXISTS tapayoka.vendor_services CASCADE`;
   await connection`DROP TABLE IF EXISTS tapayoka.vendor_equipment_categories CASCADE`;
-  await connection`DROP TABLE IF EXISTS tapayoka.installations CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.devices CASCADE`;
   await connection`DROP TABLE IF EXISTS tapayoka.services CASCADE`;
 
-  // Retire the legacy entity-scoped devices table (superseded by vendor_installations).
+  // Retire the legacy entity-scoped devices table (superseded by vendor_devices).
   // Its incoming FKs (orders/device_logs/device_offerings) were repointed above.
   await connection`DROP TABLE IF EXISTS tapayoka.devices CASCADE`;
   await connection.unsafe(
@@ -626,7 +651,7 @@ export async function initDatabase() {
   await connection`CREATE INDEX IF NOT EXISTS vendor_models_entity_idx ON tapayoka.vendor_models(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_offerings_location_idx ON tapayoka.vendor_offerings(vendor_location_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_offerings_model_idx ON tapayoka.vendor_offerings(vendor_model_id)`;
-  await connection`CREATE INDEX IF NOT EXISTS vendor_installations_offering_idx ON tapayoka.vendor_installations(vendor_offering_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_devices_offering_idx ON tapayoka.vendor_devices(vendor_offering_id)`;
 
   console.log("Database initialized successfully");
 }

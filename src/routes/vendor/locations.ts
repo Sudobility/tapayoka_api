@@ -6,7 +6,7 @@ import {
   vendorLocations,
   vendorOfferings,
   vendorModels,
-  vendorInstallations,
+  vendorDevices,
 } from "../../db/schema.ts";
 import {
   vendorLocationCreateSchema,
@@ -231,15 +231,15 @@ locations.get("/:id/offerings", async c => {
     .select({
       offering: vendorOfferings,
       modelName: vendorModels.name,
-      installationCount: sql<number>`count(${vendorInstallations.walletAddress})::int`,
+      deviceCount: sql<number>`count(${vendorDevices.walletAddress})::int`,
     })
     .from(vendorOfferings)
     .innerJoin(vendorModels, eq(vendorOfferings.vendorModelId, vendorModels.id))
     .leftJoin(
-      vendorInstallations,
+      vendorDevices,
       and(
-        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id),
-        ne(vendorInstallations.status, "Deleted")
+        eq(vendorDevices.vendorOfferingId, vendorOfferings.id),
+        ne(vendorDevices.status, "Deleted")
       )
     )
     .where(
@@ -255,7 +255,7 @@ locations.get("/:id/offerings", async c => {
     pricingTiers: r.offering.pricingTiers as PricingTier[],
     schedule: r.offering.schedule as DailySchedule[] | null,
     modelName: r.modelName,
-    installationCount: r.installationCount,
+    deviceCount: r.deviceCount,
   }));
   return c.json(successResponse(data));
 });

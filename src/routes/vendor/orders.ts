@@ -3,7 +3,7 @@ import { eq, desc, sql, and, gte, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   orders,
-  vendorInstallations,
+  vendorDevices,
   vendorOfferings,
   vendorLocations,
   offerings,
@@ -23,20 +23,17 @@ import {
 const vendorOrders = new Hono<AppEnv>();
 
 /**
- * Subquery of installation wallet addresses owned by an entity.
- * Installations are entity-scoped indirectly:
- *   vendor_installations -> vendor_offerings -> vendor_locations.entity_id
+ * Subquery of device wallet addresses owned by an entity.
+ * Devices are entity-scoped indirectly:
+ *   vendor_devices -> vendor_offerings -> vendor_locations.entity_id
  */
-function entityInstallationWallets(
-  db: ReturnType<typeof getDb>,
-  entityId: string
-) {
+function entityDeviceWallets(db: ReturnType<typeof getDb>, entityId: string) {
   return db
-    .select({ wallet: vendorInstallations.walletAddress })
-    .from(vendorInstallations)
+    .select({ wallet: vendorDevices.walletAddress })
+    .from(vendorDevices)
     .innerJoin(
       vendorOfferings,
-      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
     )
     .innerJoin(
       vendorLocations,
@@ -64,18 +61,18 @@ vendorOrders.get("/", async c => {
   const results = await db
     .select({
       order: orders,
-      deviceLabel: vendorInstallations.label,
+      deviceLabel: vendorDevices.label,
       offeringName: offerings.name,
       offeringType: offerings.type,
     })
     .from(orders)
     .innerJoin(
-      vendorInstallations,
-      eq(orders.deviceWalletAddress, vendorInstallations.walletAddress)
+      vendorDevices,
+      eq(orders.deviceWalletAddress, vendorDevices.walletAddress)
     )
     .innerJoin(
       vendorOfferings,
-      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
     )
     .innerJoin(
       vendorLocations,
@@ -112,20 +109,17 @@ vendorOrders.get("/stats", async c => {
   const db = getDb();
   const entityId = result.entity.id;
 
-  // Orders belonging to this entity's installations.
+  // Orders belonging to this entity's devices.
   const ordersOfEntity = () =>
-    inArray(
-      orders.deviceWalletAddress,
-      entityInstallationWallets(db, entityId)
-    );
+    inArray(orders.deviceWalletAddress, entityDeviceWallets(db, entityId));
 
-  // Device (installation) counts scoped to entity
+  // Device (device) counts scoped to entity
   const [deviceCount] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(vendorInstallations)
+    .from(vendorDevices)
     .innerJoin(
       vendorOfferings,
-      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
     )
     .innerJoin(
       vendorLocations,
@@ -135,10 +129,10 @@ vendorOrders.get("/stats", async c => {
 
   const [activeDeviceCount] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(vendorInstallations)
+    .from(vendorDevices)
     .innerJoin(
       vendorOfferings,
-      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
     )
     .innerJoin(
       vendorLocations,
@@ -147,11 +141,11 @@ vendorOrders.get("/stats", async c => {
     .where(
       and(
         eq(vendorLocations.entityId, entityId),
-        eq(vendorInstallations.status, "Active")
+        eq(vendorDevices.status, "Active")
       )
     );
 
-  // Orders through entity's installations
+  // Orders through entity's devices
   const [orderCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)

@@ -158,7 +158,7 @@ export const deviceOfferings = tapayoka.table(
   {
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
-      .references(() => vendorInstallations.walletAddress, {
+      .references(() => vendorDevices.walletAddress, {
         onDelete: "cascade",
       }),
     offeringId: uuid("offering_id")
@@ -179,7 +179,7 @@ export const orders = tapayoka.table(
     id: uuid("id").primaryKey().defaultRandom(),
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
-      .references(() => vendorInstallations.walletAddress),
+      .references(() => vendorDevices.walletAddress),
     offeringId: uuid("offering_id").references(() => offerings.id),
     pricingTierId: varchar("pricing_tier_id", { length: 255 }),
     buyerUid: varchar("buyer_uid", { length: 128 }),
@@ -189,7 +189,7 @@ export const orders = tapayoka.table(
     stripePaymentIntentId: varchar("stripe_payment_intent_id", {
       length: 255,
     }),
-    slotId: uuid("slot_id").references(() => vendorInstallationSlots.id, {
+    slotId: uuid("slot_id").references(() => vendorDeviceSlots.id, {
       onDelete: "set null",
     }),
     createdAt: timestamp("created_at").defaultNow(),
@@ -223,7 +223,7 @@ export const deviceLogs = tapayoka.table(
     id: uuid("id").primaryKey().defaultRandom(),
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
-      .references(() => vendorInstallations.walletAddress),
+      .references(() => vendorDevices.walletAddress),
     direction: logDirectionEnum("direction").notNull(),
     ok: boolean("ok").notNull().default(true),
     details: text("details"),
@@ -319,8 +319,8 @@ export const vendorOfferings = tapayoka.table(
   ]
 );
 
-export const vendorInstallations = tapayoka.table(
-  "vendor_installations",
+export const vendorDevices = tapayoka.table(
+  "vendor_devices",
   {
     walletAddress: varchar("wallet_address", { length: 42 })
       .primaryKey()
@@ -334,20 +334,18 @@ export const vendorInstallations = tapayoka.table(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  table => [
-    index("vendor_installations_offering_idx").on(table.vendorOfferingId),
-  ]
+  table => [index("vendor_devices_offering_idx").on(table.vendorOfferingId)]
 );
 
-export const vendorInstallationSlots = tapayoka.table(
-  "vendor_installation_slots",
+export const vendorDeviceSlots = tapayoka.table(
+  "vendor_device_slots",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    installationWalletAddress: varchar("installation_wallet_address", {
+    deviceWalletAddress: varchar("device_wallet_address", {
       length: 42,
     })
       .notNull()
-      .references(() => vendorInstallations.walletAddress, {
+      .references(() => vendorDevices.walletAddress, {
         onDelete: "cascade",
       }),
     label: varchar("label", { length: 255 }).notNull(),
@@ -363,11 +361,9 @@ export const vendorInstallationSlots = tapayoka.table(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    index("vendor_installation_slots_installation_idx").on(
-      table.installationWalletAddress
-    ),
-    unique("vendor_installation_slots_installation_label_unique").on(
-      table.installationWalletAddress,
+    index("vendor_device_slots_device_idx").on(table.deviceWalletAddress),
+    unique("vendor_device_slots_device_label_unique").on(
+      table.deviceWalletAddress,
       table.label
     ),
   ]

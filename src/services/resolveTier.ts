@@ -7,8 +7,8 @@ import type {
 import { getDb } from "../db/index.ts";
 import {
   offerings,
-  vendorInstallations,
-  vendorInstallationSlots,
+  vendorDevices,
+  vendorDeviceSlots,
   vendorOfferings,
 } from "../db/schema.ts";
 import {
@@ -42,8 +42,8 @@ export async function resolveTierForOrder(
   if (order.slotId) {
     const [row] = await db
       .select()
-      .from(vendorInstallationSlots)
-      .where(eq(vendorInstallationSlots.id, order.slotId))
+      .from(vendorDeviceSlots)
+      .where(eq(vendorDeviceSlots.id, order.slotId))
       .limit(1);
     slot = row
       ? {
@@ -54,16 +54,16 @@ export async function resolveTierForOrder(
   }
 
   if (order.pricingTierId || slot) {
-    const [installation] = await db
+    const [device] = await db
       .select()
-      .from(vendorInstallations)
-      .where(eq(vendorInstallations.walletAddress, order.deviceWalletAddress))
+      .from(vendorDevices)
+      .where(eq(vendorDevices.walletAddress, order.deviceWalletAddress))
       .limit(1);
-    if (installation) {
+    if (device) {
       const [offering] = await db
         .select()
         .from(vendorOfferings)
-        .where(eq(vendorOfferings.id, installation.vendorOfferingId))
+        .where(eq(vendorOfferings.id, device.vendorOfferingId))
         .limit(1);
       if (offering) {
         const tiers = offering.pricingTiers as PricingTier[];

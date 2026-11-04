@@ -3,22 +3,22 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorInstallationSlots,
-  vendorInstallations,
+  vendorDeviceSlots,
+  vendorDevices,
   vendorOfferings,
   vendorLocations,
 } from "../../db/schema.ts";
 import {
-  vendorInstallationSlotCreateSchema,
-  vendorInstallationSlotUpdateSchema,
-  vendorInstallationSlotBulkCreateSchema,
+  vendorDeviceSlotCreateSchema,
+  vendorDeviceSlotUpdateSchema,
+  vendorDeviceSlotBulkCreateSchema,
   ethAddressSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import {
   successResponse,
   errorResponse,
-  type VendorInstallationSlot,
+  type VendorDeviceSlot,
   type PricingTier,
   type SlotAction,
   type DeleteResult,
@@ -29,20 +29,20 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const installationSlots = new Hono<AppEnv>();
+const deviceSlots = new Hono<AppEnv>();
 
-/** Helper: verify installation belongs to entity via offering -> location */
-async function verifyInstallationOwnership(
+/** Helper: verify device belongs to entity via offering -> location */
+async function verifyDeviceOwnership(
   db: ReturnType<typeof getDb>,
   walletAddress: string,
   entityId: string
 ) {
   const [result] = await db
-    .select({ installation: vendorInstallations })
-    .from(vendorInstallations)
+    .select({ device: vendorDevices })
+    .from(vendorDevices)
     .innerJoin(
       vendorOfferings,
-      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
     )
     .innerJoin(
       vendorLocations,
@@ -50,7 +50,7 @@ async function verifyInstallationOwnership(
     )
     .where(
       and(
-        eq(vendorInstallations.walletAddress, walletAddress),
+        eq(vendorDevices.walletAddress, walletAddress),
         eq(vendorLocations.entityId, entityId)
       )
     )
@@ -58,8 +58,8 @@ async function verifyInstallationOwnership(
   return !!result;
 }
 
-/** GET /installation/:walletAddress - List all slots for an installation */
-installationSlots.get("/installation/:walletAddress", async c => {
+/** GET /device/:walletAddress - List all slots for an device */
+deviceSlots.get("/device/:walletAddress", async c => {
   const walletAddress = c.req.param("walletAddress");
   const parsed = ethAddressSchema.safeParse(walletAddress);
   if (!parsed.success) {
@@ -78,22 +78,22 @@ installationSlots.get("/installation/:walletAddress", async c => {
   }
 
   const db = getDb();
-  const owned = await verifyInstallationOwnership(
+  const owned = await verifyDeviceOwnership(
     db,
     walletAddress,
     result.entity.id
   );
   if (!owned) {
-    return c.json(errorResponse("Installation not found"), 404);
+    return c.json(errorResponse("Device not found"), 404);
   }
 
   const results = await db
     .select()
-    .from(vendorInstallationSlots)
-    .where(eq(vendorInstallationSlots.installationWalletAddress, walletAddress))
-    .orderBy(vendorInstallationSlots.sortOrder);
+    .from(vendorDeviceSlots)
+    .where(eq(vendorDeviceSlots.deviceWalletAddress, walletAddress))
+    .orderBy(vendorDeviceSlots.sortOrder);
 
-  const data: VendorInstallationSlot[] = results.map(r => ({
+  const data: VendorDeviceSlot[] = results.map(r => ({
     ...r,
     pricingTier: r.pricingTier as PricingTier | null,
     action: r.action as SlotAction | null,
@@ -101,10 +101,10 @@ installationSlots.get("/installation/:walletAddress", async c => {
   return c.json(successResponse(data));
 });
 
-/** POST /installation/:walletAddress - Create a single slot */
-installationSlots.post(
-  "/installation/:walletAddress",
-  zValidator("json", vendorInstallationSlotCreateSchema),
+/** POST /device/:walletAddress - Create a single slot */
+deviceSlots.post(
+  "/device/:walletAddress",
+  zValidator("json", vendorDeviceSlotCreateSchema),
   async c => {
     const walletAddress = c.req.param("walletAddress");
     const parsedAddr = ethAddressSchema.safeParse(walletAddress);
@@ -125,23 +125,23 @@ installationSlots.post(
     }
 
     const db = getDb();
-    const owned = await verifyInstallationOwnership(
+    const owned = await verifyDeviceOwnership(
       db,
       walletAddress,
       result.entity.id
     );
     if (!owned) {
-      return c.json(errorResponse("Installation not found"), 404);
+      return c.json(errorResponse("Device not found"), 404);
     }
 
     // Check for soft-deleted slot with same label
     const [existingSlot] = await db
       .select()
-      .from(vendorInstallationSlots)
+      .from(vendorDeviceSlots)
       .where(
         and(
-          eq(vendorInstallationSlots.installationWalletAddress, walletAddress),
-          eq(vendorInstallationSlots.label, data.label)
+          eq(vendorDeviceSlots.deviceWalletAddress, walletAddress),
+          eq(vendorDeviceSlots.label, data.label)
         )
       )
       .limit(1);
@@ -149,14 +149,14 @@ installationSlots.post(
     let slot;
     if (existingSlot && existingSlot.status === "Deleted") {
       const [reactivated] = await db
-        .update(vendorInstallationSlots)
+        .update(vendorDeviceSlots)
         .set({
           ...data,
-          installationWalletAddress: walletAddress,
+          deviceWalletAddress: walletAddress,
           status: "Active" as const,
           updatedAt: new Date(),
         })
-        .where(eq(vendorInstallationSlots.id, existingSlot.id))
+        .where(eq(vendorDeviceSlots.id, existingSlot.id))
         .returning();
       slot = reactivated;
     } else if (existingSlot) {
@@ -166,16 +166,16 @@ installationSlots.post(
       );
     } else {
       const [created] = await db
-        .insert(vendorInstallationSlots)
+        .insert(vendorDeviceSlots)
         .values({
-          installationWalletAddress: walletAddress,
+          deviceWalletAddress: walletAddress,
           ...data,
         })
         .returning();
       slot = created;
     }
 
-    const responseData: VendorInstallationSlot = {
+    const responseData: VendorDeviceSlot = {
       ...slot,
       pricingTier: slot.pricingTier as PricingTier | null,
       action: slot.action as SlotAction | null,
@@ -184,10 +184,10 @@ installationSlots.post(
   }
 );
 
-/** POST /installation/:walletAddress/bulk - Bulk create from rows x columns */
-installationSlots.post(
-  "/installation/:walletAddress/bulk",
-  zValidator("json", vendorInstallationSlotBulkCreateSchema),
+/** POST /device/:walletAddress/bulk - Bulk create from rows x columns */
+deviceSlots.post(
+  "/device/:walletAddress/bulk",
+  zValidator("json", vendorDeviceSlotBulkCreateSchema),
   async c => {
     const walletAddress = c.req.param("walletAddress");
     const parsedAddr = ethAddressSchema.safeParse(walletAddress);
@@ -208,19 +208,19 @@ installationSlots.post(
     }
 
     const db = getDb();
-    const owned = await verifyInstallationOwnership(
+    const owned = await verifyDeviceOwnership(
       db,
       walletAddress,
       result.entity.id
     );
     if (!owned) {
-      return c.json(errorResponse("Installation not found"), 404);
+      return c.json(errorResponse("Device not found"), 404);
     }
 
     // Generate labels row-major: A1, A2, ..., B1, B2, ...
     const values = data.rows.flatMap((row, rowIdx) =>
       data.columns.map((col, colIdx) => ({
-        installationWalletAddress: walletAddress,
+        deviceWalletAddress: walletAddress,
         label: `${row}${col}`,
         row,
         column: col,
@@ -229,12 +229,12 @@ installationSlots.post(
     );
 
     const slots = await db
-      .insert(vendorInstallationSlots)
+      .insert(vendorDeviceSlots)
       .values(values)
       .onConflictDoUpdate({
         target: [
-          vendorInstallationSlots.installationWalletAddress,
-          vendorInstallationSlots.label,
+          vendorDeviceSlots.deviceWalletAddress,
+          vendorDeviceSlots.label,
         ],
         set: {
           row: sql`excluded.row`,
@@ -246,7 +246,7 @@ installationSlots.post(
       })
       .returning();
 
-    const responseData: VendorInstallationSlot[] = slots.map(s => ({
+    const responseData: VendorDeviceSlot[] = slots.map(s => ({
       ...s,
       pricingTier: s.pricingTier as PricingTier | null,
       action: s.action as SlotAction | null,
@@ -256,9 +256,9 @@ installationSlots.post(
 );
 
 /** PUT /:slotId - Update a slot */
-installationSlots.put(
+deviceSlots.put(
   "/:slotId",
-  zValidator("json", vendorInstallationSlotUpdateSchema),
+  zValidator("json", vendorDeviceSlotUpdateSchema),
   async c => {
     const slotId = c.req.param("slotId");
     const parsedId = uuidSchema.safeParse(slotId);
@@ -283,17 +283,17 @@ installationSlots.put(
     // Get slot and verify ownership
     const [slot] = await db
       .select()
-      .from(vendorInstallationSlots)
-      .where(eq(vendorInstallationSlots.id, slotId))
+      .from(vendorDeviceSlots)
+      .where(eq(vendorDeviceSlots.id, slotId))
       .limit(1);
 
     if (!slot) {
       return c.json(errorResponse("Slot not found"), 404);
     }
 
-    const owned = await verifyInstallationOwnership(
+    const owned = await verifyDeviceOwnership(
       db,
-      slot.installationWalletAddress,
+      slot.deviceWalletAddress,
       result.entity.id
     );
     if (!owned) {
@@ -301,12 +301,12 @@ installationSlots.put(
     }
 
     const [updatedRow] = await db
-      .update(vendorInstallationSlots)
+      .update(vendorDeviceSlots)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(vendorInstallationSlots.id, slotId))
+      .where(eq(vendorDeviceSlots.id, slotId))
       .returning();
 
-    const updated: VendorInstallationSlot = {
+    const updated: VendorDeviceSlot = {
       ...updatedRow,
       pricingTier: updatedRow.pricingTier as PricingTier | null,
       action: updatedRow.action as SlotAction | null,
@@ -316,7 +316,7 @@ installationSlots.put(
 );
 
 /** DELETE /:slotId - Delete a slot */
-installationSlots.delete("/:slotId", async c => {
+deviceSlots.delete("/:slotId", async c => {
   const slotId = c.req.param("slotId");
   const parsedId = uuidSchema.safeParse(slotId);
   if (!parsedId.success) {
@@ -337,17 +337,17 @@ installationSlots.delete("/:slotId", async c => {
   const db = getDb();
   const [slot] = await db
     .select()
-    .from(vendorInstallationSlots)
-    .where(eq(vendorInstallationSlots.id, slotId))
+    .from(vendorDeviceSlots)
+    .where(eq(vendorDeviceSlots.id, slotId))
     .limit(1);
 
   if (!slot) {
     return c.json(errorResponse("Slot not found"), 404);
   }
 
-  const owned = await verifyInstallationOwnership(
+  const owned = await verifyDeviceOwnership(
     db,
-    slot.installationWalletAddress,
+    slot.deviceWalletAddress,
     result.entity.id
   );
   if (!owned) {
@@ -355,15 +355,15 @@ installationSlots.delete("/:slotId", async c => {
   }
 
   await db
-    .update(vendorInstallationSlots)
+    .update(vendorDeviceSlots)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
-    .where(eq(vendorInstallationSlots.id, slotId));
+    .where(eq(vendorDeviceSlots.id, slotId));
   const deleteData: DeleteResult = { deleted: true };
   return c.json(successResponse(deleteData));
 });
 
-/** DELETE /installation/:walletAddress - Delete all slots for an installation */
-installationSlots.delete("/installation/:walletAddress", async c => {
+/** DELETE /device/:walletAddress - Delete all slots for an device */
+deviceSlots.delete("/device/:walletAddress", async c => {
   const walletAddress = c.req.param("walletAddress");
   const parsedAddr = ethAddressSchema.safeParse(walletAddress);
   if (!parsedAddr.success) {
@@ -382,23 +382,21 @@ installationSlots.delete("/installation/:walletAddress", async c => {
   }
 
   const db = getDb();
-  const owned = await verifyInstallationOwnership(
+  const owned = await verifyDeviceOwnership(
     db,
     walletAddress,
     result.entity.id
   );
   if (!owned) {
-    return c.json(errorResponse("Installation not found"), 404);
+    return c.json(errorResponse("Device not found"), 404);
   }
 
   await db
-    .update(vendorInstallationSlots)
+    .update(vendorDeviceSlots)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
-    .where(
-      eq(vendorInstallationSlots.installationWalletAddress, walletAddress)
-    );
+    .where(eq(vendorDeviceSlots.deviceWalletAddress, walletAddress));
   const deleteData: DeleteResult = { deleted: true };
   return c.json(successResponse(deleteData));
 });
 
-export default installationSlots;
+export default deviceSlots;

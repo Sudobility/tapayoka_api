@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorInstallations,
+  vendorDevices,
   vendorOfferings,
   vendorLocations,
 } from "../../db/schema.ts";
@@ -41,11 +41,11 @@ vendorQr.get("/:walletAddress", async c => {
 
   const db = getDb();
   const [device] = await db
-    .select({ walletAddress: vendorInstallations.walletAddress })
-    .from(vendorInstallations)
+    .select({ walletAddress: vendorDevices.walletAddress })
+    .from(vendorDevices)
     .innerJoin(
       vendorOfferings,
-      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
     )
     .innerJoin(
       vendorLocations,
@@ -53,7 +53,7 @@ vendorQr.get("/:walletAddress", async c => {
     )
     .where(
       and(
-        eq(vendorInstallations.walletAddress, walletAddress),
+        eq(vendorDevices.walletAddress, walletAddress),
         eq(vendorLocations.entityId, result.entity.id)
       )
     )

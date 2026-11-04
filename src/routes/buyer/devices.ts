@@ -3,10 +3,10 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorInstallations,
+  vendorDevices,
   vendorOfferings,
   vendorModels,
-  vendorInstallationSlots,
+  vendorDeviceSlots,
   orders,
 } from "../../db/schema.ts";
 import { verifySignature } from "../../services/crypto.ts";
@@ -186,9 +186,9 @@ function resolveSlotPricingTier(
 }
 
 /**
- * POST /verify - Verify device signature and return full installation data
+ * POST /verify - Verify device signature and return full device data
  *
- * Combines the old verify, installation info, and slots endpoints into one.
+ * Combines the old verify, device info, and slots endpoints into one.
  * No auth required — the BLE signature is the trust mechanism.
  */
 buyerDevices.post(
@@ -220,30 +220,30 @@ buyerDevices.post(
 
     const db = getDb();
 
-    // Find the installation + offering + model
+    // Find the device + offering + model
     const [result] = await db
       .select({
-        installation: vendorInstallations,
+        device: vendorDevices,
         offering: vendorOfferings,
         model: vendorModels,
       })
-      .from(vendorInstallations)
+      .from(vendorDevices)
       .innerJoin(
         vendorOfferings,
-        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+        eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
       )
       .innerJoin(
         vendorModels,
         eq(vendorOfferings.vendorModelId, vendorModels.id)
       )
-      .where(eq(vendorInstallations.walletAddress, deviceWalletAddress))
+      .where(eq(vendorDevices.walletAddress, deviceWalletAddress))
       .limit(1);
 
     if (!result) {
       return c.json(errorResponse("Device not registered"), 404);
     }
 
-    if (result.installation.status !== "Active") {
+    if (result.device.status !== "Active") {
       return c.json(errorResponse("Device is not active"), 400);
     }
 
@@ -256,17 +256,14 @@ buyerDevices.post(
     // Fetch slots
     const slots = await db
       .select()
-      .from(vendorInstallationSlots)
+      .from(vendorDeviceSlots)
       .where(
         and(
-          eq(
-            vendorInstallationSlots.installationWalletAddress,
-            deviceWalletAddress
-          ),
-          eq(vendorInstallationSlots.status, "Active")
+          eq(vendorDeviceSlots.deviceWalletAddress, deviceWalletAddress),
+          eq(vendorDeviceSlots.status, "Active")
         )
       )
-      .orderBy(vendorInstallationSlots.sortOrder);
+      .orderBy(vendorDeviceSlots.sortOrder);
 
     // Check slot availability (batch query for active orders)
     const slotIds = slots.map(s => s.id);
@@ -301,8 +298,8 @@ buyerDevices.post(
           (result.model.interruption as VendorModelInterruption) ?? null,
         payment: (result.model.payment as VendorModelPayment) ?? null,
       },
-      installation: {
-        name: result.installation.label,
+      device: {
+        name: result.device.label,
       },
       offeringTiers,
       operating,

@@ -230,7 +230,7 @@ vendorOfferingsRoute.put(
   }
 );
 
-/** DELETE /:id - Delete a vendor offering (409 if has installations; controls cascade) */
+/** DELETE /:id - Delete a vendor offering (409 if has devices; controls cascade) */
 vendorOfferingsRoute.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");

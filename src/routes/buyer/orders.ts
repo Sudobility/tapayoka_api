@@ -6,9 +6,9 @@ import {
   orders,
   authorizations,
   users,
-  vendorInstallations,
+  vendorDevices,
   vendorOfferings,
-  vendorInstallationSlots,
+  vendorDeviceSlots,
 } from "../../db/schema.ts";
 import {
   createOrderSchema,
@@ -122,14 +122,14 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
 
   const db = getDb();
 
-  // Validate installation exists and is active
-  const [installation] = await db
+  // Validate device exists and is active
+  const [device] = await db
     .select()
-    .from(vendorInstallations)
-    .where(eq(vendorInstallations.walletAddress, deviceWalletAddress))
+    .from(vendorDevices)
+    .where(eq(vendorDevices.walletAddress, deviceWalletAddress))
     .limit(1);
 
-  if (!installation || installation.status !== "Active") {
+  if (!device || device.status !== "Active") {
     return c.json(errorResponse("Device not found or inactive"), 404);
   }
 
@@ -137,7 +137,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
   const [offering] = await db
     .select()
     .from(vendorOfferings)
-    .where(eq(vendorOfferings.id, installation.vendorOfferingId))
+    .where(eq(vendorOfferings.id, device.vendorOfferingId))
     .limit(1);
 
   if (!offering) {
@@ -167,14 +167,11 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
   if (slotId) {
     const [slot] = await db
       .select()
-      .from(vendorInstallationSlots)
+      .from(vendorDeviceSlots)
       .where(
         and(
-          eq(vendorInstallationSlots.id, slotId),
-          eq(
-            vendorInstallationSlots.installationWalletAddress,
-            deviceWalletAddress
-          )
+          eq(vendorDeviceSlots.id, slotId),
+          eq(vendorDeviceSlots.deviceWalletAddress, deviceWalletAddress)
         )
       )
       .limit(1);

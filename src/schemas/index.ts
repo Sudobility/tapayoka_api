@@ -188,7 +188,7 @@ const ethSignedMessageSchema = z.object({
   signature: z.string().min(1),
 });
 
-export const vendorInstallationCreateSchema = z.object({
+export const vendorDeviceCreateSchema = z.object({
   deviceProof: z.object({
     data: z
       .object({
@@ -202,13 +202,13 @@ export const vendorInstallationCreateSchema = z.object({
   connectionString: z.string().max(500).optional(),
 });
 
-export const vendorInstallationUpdateSchema = z.object({
+export const vendorDeviceUpdateSchema = z.object({
   label: z.string().min(1).max(255).optional(),
   vendorOfferingId: uuidSchema.optional(),
 });
 
-// Vendor installation slot schemas
-export const vendorInstallationSlotCreateSchema = z.object({
+// Vendor device slot schemas
+export const vendorDeviceSlotCreateSchema = z.object({
   label: z.string().min(1).max(255),
   row: z.string().max(50).optional(),
   column: z.string().max(50).optional(),
@@ -218,7 +218,7 @@ export const vendorInstallationSlotCreateSchema = z.object({
   action: slotActionSchema.nullable().optional(),
 });
 
-export const vendorInstallationSlotUpdateSchema = z.object({
+export const vendorDeviceSlotUpdateSchema = z.object({
   label: z.string().min(1).max(255).optional(),
   row: z.string().max(50).nullable().optional(),
   column: z.string().max(50).nullable().optional(),
@@ -228,7 +228,7 @@ export const vendorInstallationSlotUpdateSchema = z.object({
   action: slotActionSchema.nullable().optional(),
 });
 
-export const vendorInstallationSlotBulkCreateSchema = z.object({
+export const vendorDeviceSlotBulkCreateSchema = z.object({
   rows: z.array(z.string().min(1).max(50)).min(1).max(26),
   columns: z.array(z.string().min(1).max(50)).min(1).max(50),
 });
