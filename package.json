@@ -1,6 +1,6 @@
 {
   "name": "tapayoka_api",
-  "version": "0.0.72",
+  "version": "0.0.73",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -34,10 +34,10 @@
   },
   "dependencies": {
     "@hono/zod-validator": "~0.7.6",
-    "@sudobility/auth_service": "^1.1.31",
-    "@sudobility/entity_service": "^1.0.51",
-    "@sudobility/tapayoka_types": "^0.0.62",
-    "@sudobility/types": "^1.9.78",
+    "@sudobility/auth_service": "^1.1.32",
+    "@sudobility/entity_service": "^1.0.52",
+    "@sudobility/tapayoka_types": "^0.0.63",
+    "@sudobility/types": "^1.9.79",
     "drizzle-orm": "~0.45.4",
     "ethers": "~6.17.0",
     "firebase-admin": "~13.10.0",
