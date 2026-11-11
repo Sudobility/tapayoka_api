@@ -2,7 +2,6 @@ FROM --platform=${BUILDPLATFORM} oven/bun:latest
 ARG TARGETPLATFORM
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG GH_PACKAGES_TOKEN
 # Build information
 RUN printf "I'm building for TARGETPLATFORM=${TARGETPLATFORM}" \
     && printf ", TARGETARCH=${TARGETARCH}" \
@@ -33,12 +32,14 @@ RUN groupadd -g 1001 appuser && \
 # line failed the image build on the next push.
 COPY package.json bun.lock* bunfig.toml* ./
 
-# Setup npm authentication for private packages
-RUN echo "@sudobility:registry=https://npm.pkg.github.com" > ~/.npmrc && \
-    echo "//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}" >> ~/.npmrc
-
-# Install dependencies
-RUN bun install --production && \
+# Install dependencies. The private @sudobility registry token is a BuildKit
+# secret (never a build-arg or an image layer — the old split RUN left it in an
+# intermediate layer). CI passes it via docker/build-push-action `secrets:`;
+# locally: docker build --secret id=gh_packages_token,env=GH_PACKAGES_READ_TOKEN
+RUN --mount=type=secret,id=gh_packages_token \
+    printf '@sudobility:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' \
+      "$(cat /run/secrets/gh_packages_token)" > ~/.npmrc && \
+    bun install --production && \
     rm -f ~/.npmrc
 
 # Copy source code
