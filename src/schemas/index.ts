@@ -141,10 +141,10 @@ const timedPricingTierSchema = z.object({
   currencyCode: z.string().length(3),
   startPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
   startDuration: z.number().int().positive(),
-  startDurationUnit: z.enum(["minutes", "hours"]),
+  startDurationUnit: z.enum(["seconds", "minutes", "hours"]),
   marginalPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
   marginalDuration: z.number().int().positive(),
-  marginalDurationUnit: z.enum(["minutes", "hours"]),
+  marginalDurationUnit: z.enum(["seconds", "minutes", "hours"]),
   // Relay behaviour for single-slot models; pinNumber is the legacy carrier.
   action: slotActionSchema.optional(),
   pinNumber: z.number().int().min(0).max(27).optional(),
