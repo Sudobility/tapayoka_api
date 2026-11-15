@@ -6,10 +6,10 @@
       "name": "tapayoka_api",
       "dependencies": {
         "@hono/zod-validator": "~0.7.6",
-        "@sudobility/auth_service": "^1.1.33",
-        "@sudobility/entity_service": "^1.0.53",
-        "@sudobility/tapayoka_types": "^0.0.65",
-        "@sudobility/types": "^1.10.1",
+        "@sudobility/auth_service": "^1.1.34",
+        "@sudobility/entity_service": "^1.0.54",
+        "@sudobility/tapayoka_types": "^0.0.66",
+        "@sudobility/types": "^1.10.2",
         "drizzle-orm": "~0.45.4",
         "ethers": "~6.17.0",
         "firebase-admin": "~13.10.0",
@@ -226,15 +226,15 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@sudobility/auth_service": ["@sudobility/auth_service@1.1.33", "https://npm.pkg.github.com/download/@sudobility/auth_service/1.1.33/83984a00fbc2cd25344530bc75f0a9fb00de95a8", { "peerDependencies": { "@sudobility/types": "^1.10.1", "firebase-admin": "^13.0.0" } }, "sha512-rPse4uRAGTonB0Dg8hYPaxOQVfVC/COwZmJP0EUWVMBRFkCiRsOO+5iRf6OBGtEf8ai5vT0iOXAHj5ep6pUriA=="],
+    "@sudobility/auth_service": ["@sudobility/auth_service@1.1.34", "https://npm.pkg.github.com/download/@sudobility/auth_service/1.1.34/aba20aebfa73bd2acafb5d9839147f82e0426ef8", { "peerDependencies": { "@sudobility/types": "^1.10.2", "firebase-admin": "^13.0.0" } }, "sha512-U71f29fG8CfpjCmmKNkdRoQO8kL0LNZNaBWBeyzBfFgnL7leNNi5QbslxYNRhm/A0Ru5iBMiJIpwQHCnRdpmDA=="],
 
-    "@sudobility/entity_service": ["@sudobility/entity_service@1.0.53", "https://npm.pkg.github.com/download/@sudobility/entity_service/1.0.53/77766f3f9c3be21fa9ced91265a0713d52460d34", { "peerDependencies": { "@sudobility/types": "^1.10.1", "drizzle-orm": "^0.45.0", "hono": "^4.0.0" } }, "sha512-g8Dj2DWtaNdGSJf9haYTOeHH/EBNiYfc2Mx32SJXFU5by0o4ULZ3xS+sw33zqYAQilW9RE7XY14GN+NvivyLPA=="],
+    "@sudobility/entity_service": ["@sudobility/entity_service@1.0.54", "https://npm.pkg.github.com/download/@sudobility/entity_service/1.0.54/fb0c936543e4623665674bc929fdc54c0e7a2c45", { "peerDependencies": { "@sudobility/types": "^1.10.2", "drizzle-orm": "^0.45.0", "hono": "^4.0.0" } }, "sha512-NgH3QesGh1a/0tfRBquOkw6VV3aB5zQGrwYoGJ59CmTIZ3ic69DizBs5fjJqgEpobPSYdPKhd/FPqoQhONW7/A=="],
 
-    "@sudobility/tapayoka_types": ["@sudobility/tapayoka_types@0.0.65", "https://npm.pkg.github.com/download/@sudobility/tapayoka_types/0.0.65/d8e3b4deed723c90b78869741a966564e75d2562", { "peerDependencies": { "@sudobility/types": "^1.10.1" } }, "sha512-wUamFsMtJLfT/HyEBcGVBPEpv/YTvjEIMMDbVhr2MKABeOyK1pZ8R1Hg5JCighXfY6zoxNHmm6FwiWZtuFWpig=="],
+    "@sudobility/tapayoka_types": ["@sudobility/tapayoka_types@0.0.66", "https://npm.pkg.github.com/download/@sudobility/tapayoka_types/0.0.66/9f88437774ab62491c31ed43ee7a8cc15440dfdd", { "peerDependencies": { "@sudobility/types": "^1.10.2" } }, "sha512-D5B3FAByLiFXne0MEetPnyTkN858vGBd5wHqOX3JmF7zJVq1wHt6nGuhhs34g3ZVSZQ/0NrMfG7BsOVC7VT70g=="],
 
     "@sudobility/test-db-guard": ["@sudobility/test-db-guard@1.0.3", "https://npm.pkg.github.com/download/@sudobility/test-db-guard/1.0.3/1b60364ccb30369e4ddc9a005ffdf03ea2644a65", {}, "sha512-VLYACu7PMDG4hqO9g5y/E0NOgDNS5HnG+UU/jr5Po0S5zrZv80i51rxwC2sOVX8gbyR04s632OoMULFiju4aZw=="],
 
-    "@sudobility/types": ["@sudobility/types@1.10.1", "https://npm.pkg.github.com/download/@sudobility/types/1.10.1/8e353f55822e0bc3fa9555dfe3aee593e140c012", {}, "sha512-LmJyjDDY5rHDET1wstkT0i59SSOrOXijL2iqrgfcK6VHtKcBEw7FFpbw4CyHn+dhR9kqkYpEydSfypoqw7crMg=="],
+    "@sudobility/types": ["@sudobility/types@1.10.2", "https://npm.pkg.github.com/download/@sudobility/types/1.10.2/c25e0a0122786dbd23651b15aab022c02c3a5a5e", {}, "sha512-CjMjxeoWE+WMt7HWPWFwcjmjXEbwS9ZPnoa6tN8dBzQSWCaCTZBIfjDDk7xwi+9/2OOxVaorDEHNOZTqSdUxvA=="],
 
     "@tootallnate/once": ["@tootallnate/once@2.0.1", "", {}, "sha512-HqmEUIGRJ5fSXchkVgR5F7qn48bDBzv0kWj/Kfu5e6uci4UlEeng4331LnBkWffb++Ei3FOVLxo8JJWMFBDMeQ=="],
 
