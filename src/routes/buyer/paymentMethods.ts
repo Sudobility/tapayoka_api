@@ -9,7 +9,7 @@ import {
   detachPaymentMethod,
   setDefaultPaymentMethod,
 } from "../../services/stripe.ts";
-import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import { successResponse, errorResponse } from "@sudobility/types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerPaymentMethods = new Hono<AppEnv>();

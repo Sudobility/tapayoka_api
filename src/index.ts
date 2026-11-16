@@ -9,7 +9,11 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { initDatabase } from "./db/index.ts";
 import routes from "./routes/index.ts";
-import { successResponse } from "@sudobility/tapayoka_types";
+import {
+  successResponse,
+  type ApiInfoResponse,
+  type HealthCheckData,
+} from "@sudobility/types";
 import { getEnv } from "./lib/env-helper.ts";
 
 const app = new Hono();
@@ -47,24 +51,23 @@ app.use("/api/*", async (c, next) => {
   }
 });
 
-// Health check
+// Root API metadata
 app.get("/", c => {
-  return c.json(
-    successResponse({
-      name: "Tapayoka API",
-      version: "0.0.1",
-      status: "healthy",
-    })
-  );
+  const info: ApiInfoResponse = {
+    name: "Tapayoka API",
+    version: "0.0.1",
+    status: "healthy",
+  };
+  return c.json(successResponse(info));
 });
 
 // Health endpoint (public, no auth)
 app.get("/health", c => {
-  return c.json(
-    successResponse({
-      status: "healthy",
-    })
-  );
+  const health: HealthCheckData = {
+    status: "healthy",
+    version: "0.0.1",
+  };
+  return c.json(successResponse(health));
 });
 
 // API routes

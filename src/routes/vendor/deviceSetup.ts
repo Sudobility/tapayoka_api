@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { buildServerSetupPayload } from "../../services/crypto.ts";
-import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import { successResponse, errorResponse } from "@sudobility/types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const deviceSetup = new Hono<AppEnv>();

@@ -3,7 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 import { getDb } from "../../db/index.ts";
 import { deviceLogs } from "../../db/schema.ts";
 import { telemetryEventSchema } from "../../schemas/index.ts";
-import { successResponse, type DeviceLog } from "@sudobility/tapayoka_types";
+import { successResponse } from "@sudobility/types";
+import { type DeviceLog } from "@sudobility/tapayoka_types";
 
 const telemetry = new Hono();
 
