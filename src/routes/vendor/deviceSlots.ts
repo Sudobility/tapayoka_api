@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorDeviceSlots,
@@ -58,6 +58,26 @@ async function verifyDeviceOwnership(
   return !!result;
 }
 
+/** Whether `tierId` is a tier in the device's offering menu (Tiered slots). */
+async function offeringTierExists(
+  db: ReturnType<typeof getDb>,
+  walletAddress: string,
+  tierId: string
+): Promise<boolean> {
+  const [row] = await db
+    .select({ pricingTiers: vendorOfferings.pricingTiers })
+    .from(vendorDevices)
+    .innerJoin(
+      vendorOfferings,
+      eq(vendorDevices.vendorOfferingId, vendorOfferings.id)
+    )
+    .where(eq(vendorDevices.walletAddress, walletAddress))
+    .limit(1);
+  if (!row) return false;
+  const tiers = (row.pricingTiers as PricingTier[]) ?? [];
+  return tiers.some(t => t.id === tierId);
+}
+
 /** GET /device/:walletAddress - List all slots for an device */
 deviceSlots.get("/device/:walletAddress", async c => {
   const walletAddress = c.req.param("walletAddress");
@@ -90,7 +110,12 @@ deviceSlots.get("/device/:walletAddress", async c => {
   const results = await db
     .select()
     .from(vendorDeviceSlots)
-    .where(eq(vendorDeviceSlots.deviceWalletAddress, walletAddress))
+    .where(
+      and(
+        eq(vendorDeviceSlots.deviceWalletAddress, walletAddress),
+        ne(vendorDeviceSlots.status, "Deleted")
+      )
+    )
     .orderBy(vendorDeviceSlots.sortOrder);
 
   const data: VendorDeviceSlot[] = results.map(r => ({
@@ -132,6 +157,14 @@ deviceSlots.post(
     );
     if (!owned) {
       return c.json(errorResponse("Device not found"), 404);
+    }
+
+    // A referenced offering tier (Tiered slot) must exist in the offering menu.
+    if (
+      data.pricingTierId &&
+      !(await offeringTierExists(db, walletAddress, data.pricingTierId))
+    ) {
+      return c.json(errorResponse("Pricing tier not found in offering"), 400);
     }
 
     // Check for soft-deleted slot with same label
@@ -298,6 +331,18 @@ deviceSlots.put(
     );
     if (!owned) {
       return c.json(errorResponse("Slot not found"), 404);
+    }
+
+    // A referenced offering tier (Tiered slot) must exist in the offering menu.
+    if (
+      data.pricingTierId &&
+      !(await offeringTierExists(
+        db,
+        slot.deviceWalletAddress,
+        data.pricingTierId
+      ))
+    ) {
+      return c.json(errorResponse("Pricing tier not found in offering"), 400);
     }
 
     const [updatedRow] = await db

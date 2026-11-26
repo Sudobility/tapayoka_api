@@ -15,16 +15,18 @@ export function getStripe(): Stripe {
   return stripeClient;
 }
 
-/** Create a payment intent for an order */
+/** Create a payment intent for an order. `currency` is a lowercase ISO code
+ *  (e.g. "usd") derived from the pricing tier's currencyCode. */
 export async function createPaymentIntent(
   amountCents: number,
+  currency: string,
   metadata: Record<string, string>,
   customerId: string
 ): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
   return stripe.paymentIntents.create({
     amount: amountCents,
-    currency: "usd",
+    currency,
     metadata,
     // The saved card is attached to this customer; Stripe requires the
     // customer on the PaymentIntent to confirm with an attached method.

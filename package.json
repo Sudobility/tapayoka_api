@@ -1,6 +1,6 @@
 {
   "name": "tapayoka_api",
-  "version": "0.0.82",
+  "version": "0.0.83",
   "module": "src/index.ts",
   "type": "module",
   "private": true,

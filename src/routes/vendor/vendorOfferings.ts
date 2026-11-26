@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorOfferings,
   vendorLocations,
   vendorModels,
+  vendorDevices,
+  vendorDeviceSlots,
 } from "../../db/schema.ts";
 import {
   vendorOfferingCreateSchema,
@@ -213,6 +215,45 @@ vendorOfferingsRoute.put(
 
     if (!existing) {
       return c.json(errorResponse("Offering not found"), 404);
+    }
+
+    // Don't let a tier be removed while a (Tiered) slot still references it by
+    // id — that would leave the slot with a dangling price. The vendor must
+    // re-point those slots first.
+    if (data.pricingTiers) {
+      const oldTiers = (existing.offering.pricingTiers as PricingTier[]) ?? [];
+      const newIds = new Set(data.pricingTiers.map(t => t.id));
+      const removedIds = oldTiers
+        .map(t => t.id)
+        .filter(tierId => !newIds.has(tierId));
+      if (removedIds.length > 0) {
+        const [referencing] = await db
+          .select({ id: vendorDeviceSlots.id })
+          .from(vendorDeviceSlots)
+          .innerJoin(
+            vendorDevices,
+            eq(
+              vendorDeviceSlots.deviceWalletAddress,
+              vendorDevices.walletAddress
+            )
+          )
+          .where(
+            and(
+              eq(vendorDevices.vendorOfferingId, id),
+              ne(vendorDeviceSlots.status, "Deleted"),
+              inArray(vendorDeviceSlots.pricingTierId, removedIds)
+            )
+          )
+          .limit(1);
+        if (referencing) {
+          return c.json(
+            errorResponse(
+              "Cannot remove a pricing tier that a slot still uses; re-point those slots first"
+            ),
+            409
+          );
+        }
+      }
     }
 
     const [updatedRow] = await db

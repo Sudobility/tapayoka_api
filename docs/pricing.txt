@@ -1,0 +1,343 @@
+===============================================================================
+TAPAYOKA PRICING — SHARED VOCABULARY
+===============================================================================
+
+Purpose: a glossary so we describe pricing the same way across api / types /
+lib / vendor app / buyer app / device. Terms in Title-Case or `code` below are
+the canonical names; use these, not synonyms.
+
+Source of truth for the shapes: @sudobility/tapayoka_types (src/index.ts).
+Source of truth for the storage: tapayoka_api/src/db/schema.ts.
+All money is integer cents. Tier prices are decimal STRINGS ("2.50"); amounts
+stored on an Order are integer `amountCents`. All durations resolve to SECONDS.
+
+
+-------------------------------------------------------------------------------
+1. THE SHAPE OF THE WORLD (who owns what)
+-------------------------------------------------------------------------------
+
+Entity (vendor org)
+  └─ VendorLocation        a physical place (address/city/...)
+  └─ VendorModel           a *template* of behaviour (how a kind of machine
+                           works + how it is priced). NOT itself priceable.
+  └─ VendorOffering        a Location × Model pairing. THIS is where the
+                           price menu (PricingTiers) and operating Schedule live.
+       └─ VendorDevice     one physical box (identified by walletAddress).
+            └─ VendorDeviceSlot   an addressable sub-unit of a device
+                                  (a locker door, a vending column). Single-unit
+                                  devices have exactly one implicit/real slot.
+
+A buyer scans a device QR → the api resolves Device → Offering → Model, and
+returns the price menu + slots (BuyerVerifyResponse). The buyer picks, pays,
+and the device is authorized to run.
+
+
+-------------------------------------------------------------------------------
+2. VENDOR MODEL AXES (the behaviour template)
+-------------------------------------------------------------------------------
+A VendorModel is defined by a small set of orthogonal enums. These decide HOW
+pricing is shaped and WHERE the relay behaviour lives. (types: VendorModel*)
+
+type         VendorModelType   Washer | Dryer | Parking | Charging | Locker |
+                               Vending | Tourist Binocular. Cosmetic/category;
+                               does not drive pricing math.
+
+pricing      VendorModelPricing
+   fixed      Flat price per use, independent of time. → FixedPricingTier.
+   variable   Price scales with time: a start rate + a marginal rate.
+              → TimedPricingTier.
+   (This axis chooses which PricingTier SHAPE the offering's tiers take.)
+
+slot         VendorModelSlot
+   single     One unit per device (a washer). One shared tier, one relay.
+   multi1D    A row of independent units under one label (lockers 1–10).
+   multi2D    A grid addressed by row + column (a vending machine).
+              multi1D/multi2D = "multi-slot models".
+
+slotPricing  VendorModelSlotPricing   HOW slots get their price.
+   Tiered     Slots share the offering's PricingTiers; each slot picks one
+              (by pricingTierId).
+   Unique     Each slot carries its OWN embedded PricingTier (pricingTier).
+   These are the "two places to define a price" — see §3.
+   NOTE: the DB enum vendor_model_slot_pricing still lists legacy values
+   "Same"/"Different" alongside "Tiered"/"Unique". The TYPES and the UI only
+   use Tiered | Unique. Treat Same/Different as dead/legacy — do not introduce
+   new uses; a cleanup migration should drop them.
+
+action       VendorModelAction   WHAT the relay does for a purchase.
+   timed      One pin held for the purchased duration (washer runs 30 min).
+   sequence   A fixed one-shot pulse list, run once (vend an item).
+   (Carried inside a SlotAction — see §4.)
+
+interruption VendorModelInterruption
+   stop       Pause/unplug ends the session; remaining time is forfeited.
+   continue   Session keeps counting down even if the device is interrupted.
+
+payment      VendorModelPayment
+   atStart    Buyer pays up front, before the device runs. (The implemented
+              path today.)
+   atEnd      Buyer charged when the session finishes. Two-phase: a relay
+              pulse at start AND at end (e.g. a locker: unlock now, lock later).
+              The end-phase execution is a later workstream.
+
+
+-------------------------------------------------------------------------------
+3. USE-CASE CATALOG — HOW THE AXES COMBINE
+-------------------------------------------------------------------------------
+Two things describe a device and are INDEPENDENT:
+  • pricing (fixed | variable) — is the authorized duration CONSTANT, or does it
+    scale with the amount paid?
+  • action — the ordered relay STEP LIST (§5). Unified to pinOn / pinOff / wait;
+    there is NO "timed vs sequence" enum — the steps say everything.
+
+The pricing axis sets how long the device's "purchased wait" lasts:
+  fixed pricing    → purchased wait is CONSTANT (length comes from the tier).
+  variable pricing → purchased wait is COMPUTED (scales with amount paid).
+So Washer and Dryer run the IDENTICAL step list (pinOn → wait → pinOff); they
+differ ONLY in `pricing`, which sets the wait's length.
+
+  DEVICE              SLOT    PRICING   STEPS (§5)             WAIT LENGTH        PRICE LIVES
+  ------------------  ------  --------  ---------------------  -----------------  ---------------
+  Washer              single  fixed     pinOn → wait → pinOff  fixed (from tier)  offering tier(s)
+  Dryer               single  variable  pinOn → wait → pinOff  computed(payment)  offering tier(s)
+  Parking             single  variable  pinOn → wait → pinOff  computed(payment)  offering tier(s)
+  Tourist Binocular   single  variable  pinOn → wait → pinOff  computed(payment)  offering tier(s)
+  Vending (1 slot)    single  fixed     pinOn → wait → pinOff  fixed (pulse)      offering tier(s)
+  Vending (multi 1D)  multi   per-slot  per-slot step list     per-slot           Tiered OR Unique
+  Vending (multi 2D)  multi   per-slot  per-slot step list     per-slot           Tiered OR Unique
+  Locker              multi   per-slot  start + end lists      DEFERRED           (§2 atEnd, §8)
+
+SINGLE-SLOT devices: the buyer picks one tier from the offering's menu
+(offeringTiers). A washer offering may list several fixed tiers ("Quick $3",
+"Deep $5"); a dryer lists variable ($/time) tiers. Relay action lives on the
+tier (shared across every same-tier device).
+
+MULTI-SLOT devices: each slot is wired to its own pin, so the relay ACTION is
+always PER-SLOT (VendorDeviceSlot.action). Price is defined in ONE of two
+places:
+  1. Slot Pricing Tier  (slotPricing = Tiered): the slot SELECTS one tier from
+     the offering's shared pricingTiers list (slot.pricingTierId). Use when many
+     slots reuse a small set of prices.
+  2. Slot Pricing       (slotPricing = Unique): the slot carries its OWN tier
+     (slot.pricingTier), priced independently. Use for a high-value vending
+     machine where every slot/column is priced individually.
+
+LOCKER is the only two-phase case (a relay action at start AND at end). It is
+DEFERRED — not modelled end-to-end yet. See §2 payment=atEnd and §8 (end pulses).
+
+
+-------------------------------------------------------------------------------
+4. PRICING TIER (the actual price menu item)
+-------------------------------------------------------------------------------
+A PricingTier is ONE sellable option a buyer can choose. A VendorOffering
+holds an array `pricingTiers: PricingTier[]`. PricingTier is a union with a
+`type` discriminator that mirrors the model's `pricing` axis:
+
+Common fields (both kinds):
+   id            string, stable within the offering. Orders reference this.
+   name          display name ("Quick Wash").
+   currencyCode  ISO code ("USD").
+   action?       SlotAction — relay behaviour for single-slot models (§5).
+
+FixedPricingTier (type: 'fixed')        ← model pricing = fixed
+   price         decimal string, the flat charge ("3.00").
+   durationSeconds?  the purchased-wait length for a fixed-duration device
+                 (washer = 1800). REQUIRED under the §5 model: with duration off
+                 the pin, a tier that drives a source:'purchased' wait has
+                 nowhere else to store its length. Pure-pulse vends use only
+                 source:'fixed' waits and need none.
+   action?       Action (§5) — the relay step list for single-slot models.
+   signals?      DEPRECATED inline pulses; migrated into `action`.
+
+TimedPricingTier (type: 'timed')        ← model pricing = variable
+   startPrice          decimal string — the minimum / entry charge.
+   startDuration       number  }  the base block the startPrice buys,
+   startDurationUnit   unit    }  e.g. 2.50 for 30 minutes.
+   marginalPrice       decimal string — the cost of each additional block.
+   marginalDuration    number  }  the size of one additional block,
+   marginalDurationUnit unit   }  e.g. 1.00 per extra 10 minutes.
+   pinNumber?          DEPRECATED inline relay pin; migrated into `action`.
+
+DurationUnit = 'seconds' | 'minutes' | 'hours'  (→ 1 / 60 / 3600 s).
+
+So a timed tier is a linear price curve:
+   amountCents = startPrice + N × marginalPrice   (N = extra blocks bought)
+   seconds     = startDuration + N × marginalDuration
+A fixed tier is a single point: (price, base seconds from its start pulses).
+
+
+-------------------------------------------------------------------------------
+5. ACTION (relay behaviour, decoupled from price)
+-------------------------------------------------------------------------------
+TARGET MODEL (agreed) — an Action is an ORDERED LIST OF PRIMITIVE STEPS. There
+are only three primitives, and DURATION BELONGS TO A `wait`, never to a pin:
+
+   ActionStep =
+     | { op: 'pinOn';  pin: number }                       turn a pin on
+     | { op: 'pinOff'; pin: number }                       turn a pin off
+     | { op: 'wait';   source: 'fixed'; seconds: number }  wait a literal # of secs
+     | { op: 'wait';   source: 'purchased' }               wait the order's
+                                                           purchased seconds
+
+A `wait` gets its length from one of two SOURCES:
+   fixed      a literal number baked into the config (a vend motor pulse: 0.5s).
+   purchased  filled at authorization time from the order's authorizedSeconds
+              (the time the buyer paid for — §7). Not known until purchase.
+
+This unifies the old "timed" and "sequence" — both are just step lists:
+
+   Washer   [ pinOn(5), wait(purchased),  pinOff(5) ]   purchased len FIXED by tier
+   Dryer    [ pinOn(5), wait(purchased),  pinOff(5) ]   purchased len SCALES w/ pay
+   Vend     [ pinOn(5), wait(fixed 0.5s), pinOff(5) ]   literal pulse
+
+So Washer and Dryer run the IDENTICAL action; they differ ONLY in the pricing
+tier (fixed vs variable), which sets how long the `purchased` wait lasts — §4.
+
+TWO PHASES: an Action has `start` steps (run at session start) and optional
+`end` steps (run at session end — the two-phase locker; DEFERRED):
+
+   interface Action { start: ActionStep[]; end?: ActionStep[]; }
+
+WHERE the action lives (resolved slot.action ?? tier.action):
+   single-slot models  → on the shared PricingTier (every same-tier device
+                         behaves identically).
+   multi-slot models   → per VendorDeviceSlot (each door/column has its own pin).
+   Helper: resolveEffectiveAction(slot, tier) — slot wins, else tier.
+
+DECIDED — a `wait` carries `source: 'fixed'` (literal seconds in the config) or
+`source: 'purchased'` (seconds filled from the order's authorizedSeconds at
+authorization time). Washer and dryer both use a purchased wait; the pricing
+tier (fixed vs variable) decides whether that length is constant or scales.
+
+CURRENT CODE (delta to migrate): today an action is
+  SlotAction { type:'timed'|'sequence', start: OfferingSignal[], end? }
+  OfferingSignal { pinNumber, duration }
+i.e. duration is attached to the PIN, and a `timed` action's single start pin
+has its duration OVERWRITTEN by the purchased seconds at authorization. The
+target model drops `type`, makes `wait` a first-class step, and takes duration
+off the pin. The device-facing `offeringType` (§8) also becomes redundant once
+the payload simply carries the resolved step list.
+
+
+-------------------------------------------------------------------------------
+6. SLOTS & WHERE THE PRICE COMES FROM
+-------------------------------------------------------------------------------
+VendorDeviceSlot (multi-slot only, but single-slot may still carry one):
+   pricingTierId   string | null  → references an offering tier (Tiered mode)
+   pricingTier     PricingTier | null → the slot's own tier (Unique mode)
+   action          SlotAction | null  → per-slot relay (multi-slot models)
+
+Resolution of a slot's effective tier (services/resolveTier.ts):
+   offering tier matching pricingTierId   (Tiered)
+   ?? slot.pricingTier                    (Unique)
+   ?? null
+
+Buyer-facing menu (resolveServiceOptions, types):
+   > 1 slot            → the chosen slot's single pricingTier
+   else offeringTiers  → the full offering menu (single-slot pick-a-service)
+   else                → the only slot's tier
+
+
+-------------------------------------------------------------------------------
+7. ORDER (a purchase) & THE MONEY FLOW
+-------------------------------------------------------------------------------
+Order (db.orders / types.Order):
+   deviceWalletAddress   which device
+   offeringId            legacy offerings table link (nullable; see §9)
+   pricingTierId         which tier was bought (string; matched in offering)
+   slotId                which slot (nullable; single-slot = null)
+   amountCents           what the buyer actually pays (integer cents)
+   authorizedSeconds     how long the device is authorized to run
+   status                OrderStatus
+   stripePaymentIntentId Stripe linkage
+
+OrderStatus lifecycle:
+   CREATED    order placed, not yet paid. Holds a slot (with staleness window).
+   PAID       Stripe charge succeeded.
+   AUTHORIZED server signed an authorization; PiCommand issued to device.
+   RUNNING    device is executing / session live (holds the slot).
+   DONE       session completed.
+   FAILED     payment failed, or cancelled/refunded.
+
+Create-order pricing rules (routes/buyer/orders.ts POST /):
+   1. Resolve device → offering → tier by pricingTierId.
+   2. minCents = tierMinCents(tier)   (fixed.price, or timed.startPrice).
+   3. REJECT if amountCents < minCents. The buyer may pay MORE than the
+      minimum (buying extra time on a timed tier); never less.
+   4. authorizedSeconds = calculateAuthorizedSeconds(tier, amountCents):
+        fixed → tierBaseSeconds(tier) (ignores extra money).
+        timed → startSeconds + floor((amountCents - startCents)/marginalCents)
+                × stepSeconds. Pay-more-get-more, floored to whole blocks.
+   5. Slot availability checked (RUNNING, or pre-running within 10-min stale
+      window, blocks the slot).
+
+Payment (POST /:id/pay): Stripe PaymentIntent for amountCents against the
+buyer's saved customer/payment method → on success status PAID, then an
+Authorization is created and a signed PiCommand ("EXECUTE") is returned.
+
+Cancel (POST /:id/cancel): releases a pre-running order; refunds if already
+charged; status → FAILED.
+
+
+-------------------------------------------------------------------------------
+8. AUTHORIZATION (turning a paid order into device instructions)
+-------------------------------------------------------------------------------
+resolveTierForOrder + slotAuthorizationFields produce TierAuthorizationFields,
+which become the signed AuthorizationPayload sent to the device:
+
+   offeringType   OfferingType — derived, device-facing shape of the action:
+        TRIGGER   no relay action (bare open/trigger).
+        FIXED     run the `signals` pulse list once (sequence action).
+        TIMED     hold signals[0].pinNumber for `seconds`.
+   signals?       start pulses (present for FIXED and TIMED).
+   end?           end pulses (two-phase atEnd models).
+
+AuthorizationPayload (signed by the server wallet, 5-min expiry):
+   orderId, offeringType, seconds, signals?, end?, nonce, exp.
+
+NOTE the two OfferingType meanings — see §9.
+
+
+-------------------------------------------------------------------------------
+9. LEGACY vs CURRENT (do not conflate)
+-------------------------------------------------------------------------------
+There are TWO pricing systems in the code; the model above is CURRENT.
+
+CURRENT  VendorModel + VendorOffering(.pricingTiers) + VendorDeviceSlot,
+         tiers are PricingTier (fixed/timed), relay via SlotAction. Orders
+         reference pricingTierId (+ slotId). This is what new work uses.
+
+LEGACY   db table `offerings` (priceCents, fixedMinutes, minutesPer25c) with
+         enum OfferingType = TRIGGER | FIXED | TIMED. Orders.offeringId points
+         here. resolveTierForOrder falls back to it only when no tier/slot
+         signal is available, defaulting to TRIGGER.
+
+OVERLOADED TERMS — call out which you mean:
+   OfferingType (TRIGGER/FIXED/TIMED)
+        • LEGACY: the old offering's pricing kind.
+        • CURRENT: the derived DEVICE-FACING action shape in the auth payload
+          (see §8). Same spelling, different role.
+   "Offering"
+        • legacy `offerings` row  vs  current `VendorOffering` (Location×Model).
+   "Fixed"
+        • model pricing axis `fixed` (flat price)  vs  OfferingType `FIXED`
+          (run a pulse sequence). Unrelated.
+
+
+-------------------------------------------------------------------------------
+10. KEY HELPERS (tapayoka_types — single source for math)
+-------------------------------------------------------------------------------
+   priceStringToCents("2.50")        → 250
+   durationUnitSeconds(unit)         → 1 / 60 / 3600
+   tierMinCents(tier)                → entry price in cents
+   tierBaseSeconds(tier)             → seconds the entry price buys
+   tierStepSeconds(tier)             → seconds per marginal block (timed)
+   computeFromSteps(tier, n)         → {amountCents, seconds} for n extra blocks
+   calculateAuthorizedSeconds(tier, amountCents) → seconds for a paid amount
+   resolveEffectiveAction(slot,tier) → SlotAction (slot wins)
+   actionAuthorizationFields(action, seconds) → TierAuthorizationFields
+   formatPrice / formatTierPrice / formatDuration / formatPricingSubtitle → UI
+   initialStep / nextStepAfterSlot / nextStepAfterService → buyer flow steps
+
+Rule of thumb: never re-derive price or duration math in a route or component.
+Call these helpers so api, vendor app and buyer app agree to the cent/second.

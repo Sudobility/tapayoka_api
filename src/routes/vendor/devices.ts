@@ -100,7 +100,10 @@ devices.get("/", async c => {
     .innerJoin(vendorModels, eq(vendorOfferings.vendorModelId, vendorModels.id))
     .leftJoin(
       vendorDeviceSlots,
-      eq(vendorDevices.walletAddress, vendorDeviceSlots.deviceWalletAddress)
+      and(
+        eq(vendorDevices.walletAddress, vendorDeviceSlots.deviceWalletAddress),
+        ne(vendorDeviceSlots.status, "Deleted")
+      )
     )
     .where(
       and(
@@ -160,7 +163,10 @@ devices.get("/service/:serviceId", async c => {
     .from(vendorDevices)
     .leftJoin(
       vendorDeviceSlots,
-      eq(vendorDevices.walletAddress, vendorDeviceSlots.deviceWalletAddress)
+      and(
+        eq(vendorDevices.walletAddress, vendorDeviceSlots.deviceWalletAddress),
+        ne(vendorDeviceSlots.status, "Deleted")
+      )
     )
     .where(
       and(

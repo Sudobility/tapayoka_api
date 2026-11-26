@@ -116,7 +116,7 @@ export const vendorModelUpdateSchema = z.object({
 });
 
 const offeringSignalSchema = z.object({
-  pinNumber: z.number().int().min(0).max(25),
+  pinNumber: z.number().int().min(0).max(27),
   duration: z.number().int().positive(),
 });
 
@@ -166,11 +166,19 @@ const pricingTierSchema = z.discriminatedUnion("type", [
   fixedPricingTierSchema,
 ]);
 
+// A tier id must be unique within its offering — orders/slots reference tiers
+// by id, so duplicates make the reference ambiguous.
+const pricingTiersSchema = z
+  .array(pricingTierSchema)
+  .refine(tiers => new Set(tiers.map(t => t.id)).size === tiers.length, {
+    message: "Pricing tier ids must be unique within an offering",
+  });
+
 export const vendorOfferingCreateSchema = z.object({
   vendorLocationId: uuidSchema,
   vendorModelId: uuidSchema,
   name: z.string().min(1).max(255),
-  pricingTiers: z.array(pricingTierSchema),
+  pricingTiers: pricingTiersSchema,
   schedule: z.array(dailyScheduleSchema).optional(),
 });
 
@@ -178,7 +186,7 @@ export const vendorOfferingUpdateSchema = z.object({
   vendorLocationId: uuidSchema.optional(),
   vendorModelId: uuidSchema.optional(),
   name: z.string().min(1).max(255).optional(),
-  pricingTiers: z.array(pricingTierSchema).optional(),
+  pricingTiers: pricingTiersSchema.optional(),
   schedule: z.array(dailyScheduleSchema).nullable().optional(),
 });
 
@@ -207,26 +215,34 @@ export const vendorDeviceUpdateSchema = z.object({
   vendorOfferingId: uuidSchema.optional(),
 });
 
-// Vendor device slot schemas
-export const vendorDeviceSlotCreateSchema = z.object({
-  label: z.string().min(1).max(255),
-  row: z.string().max(50).optional(),
-  column: z.string().max(50).optional(),
-  sortOrder: z.number().int().min(0).optional(),
-  pricingTierId: z.string().min(1).optional(),
-  pricingTier: pricingTierSchema.optional(),
-  action: slotActionSchema.nullable().optional(),
-});
+// Vendor device slot schemas. A slot's price is EITHER a shared offering tier
+// (pricingTierId) OR its own custom tier (pricingTier) — never both.
+const SLOT_ONE_PRICING_SOURCE =
+  "A slot cannot have both a pricing tier id and a custom pricing tier";
 
-export const vendorDeviceSlotUpdateSchema = z.object({
-  label: z.string().min(1).max(255).optional(),
-  row: z.string().max(50).nullable().optional(),
-  column: z.string().max(50).nullable().optional(),
-  sortOrder: z.number().int().min(0).optional(),
-  pricingTierId: z.string().min(1).nullable().optional(),
-  pricingTier: pricingTierSchema.nullable().optional(),
-  action: slotActionSchema.nullable().optional(),
-});
+export const vendorDeviceSlotCreateSchema = z
+  .object({
+    label: z.string().min(1).max(255),
+    row: z.string().max(50).optional(),
+    column: z.string().max(50).optional(),
+    sortOrder: z.number().int().min(0).optional(),
+    pricingTierId: z.string().min(1).optional(),
+    pricingTier: pricingTierSchema.optional(),
+    action: slotActionSchema.nullable().optional(),
+  })
+  .refine(d => !(d.pricingTierId && d.pricingTier), SLOT_ONE_PRICING_SOURCE);
+
+export const vendorDeviceSlotUpdateSchema = z
+  .object({
+    label: z.string().min(1).max(255).optional(),
+    row: z.string().max(50).nullable().optional(),
+    column: z.string().max(50).nullable().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+    pricingTierId: z.string().min(1).nullable().optional(),
+    pricingTier: pricingTierSchema.nullable().optional(),
+    action: slotActionSchema.nullable().optional(),
+  })
+  .refine(d => !(d.pricingTierId && d.pricingTier), SLOT_ONE_PRICING_SOURCE);
 
 export const vendorDeviceSlotBulkCreateSchema = z.object({
   rows: z.array(z.string().min(1).max(50)).min(1).max(26),

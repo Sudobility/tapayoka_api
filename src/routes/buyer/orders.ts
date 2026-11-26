@@ -7,6 +7,7 @@ import {
   authorizations,
   users,
   vendorDevices,
+  vendorModels,
   vendorOfferings,
   vendorDeviceSlots,
 } from "../../db/schema.ts";
@@ -27,6 +28,7 @@ import {
   errorResponse,
   calculateAuthorizedSeconds,
   tierMinCents,
+  priceStringToCents,
   type PricingTier,
   type AuthorizationPayload,
   type PiCommand,
@@ -44,6 +46,81 @@ const buyerOrders = new Hono<AppEnv>();
 // blocks the slot.
 const PRE_RUNNING_STATUSES = ["CREATED", "PAID", "AUTHORIZED"] as const;
 const SLOT_HOLD_STALE_MS = 10 * 60 * 1000; // 10 minutes
+
+// A sanity ceiling so a client bug or bad input can't authorize an absurd
+// amount or run time. No legitimate single order approaches this.
+const MAX_ORDER_AMOUNT_CENTS = 1_000_000; // $10,000
+
+/**
+ * Resolve the tier an order refers to: a tier from the offering's menu, or
+ * (for a custom-priced slot) the slot's own embedded tier. Mirrors buyer verify
+ * and authorization, which both understand per-slot custom tiers.
+ */
+function pickOrderTier(
+  offeringTiers: PricingTier[],
+  slotPricingTier: unknown,
+  pricingTierId: string
+): PricingTier | null {
+  const fromOffering = offeringTiers.find(t => t.id === pricingTierId);
+  if (fromOffering) return fromOffering;
+  const custom = (slotPricingTier as PricingTier | null) ?? null;
+  return custom && custom.id === pricingTierId ? custom : null;
+}
+
+/**
+ * Whether `amountCents` is a charge the tier can actually produce: a fixed tier
+ * is its exact price; a timed tier is the start price plus a whole number of
+ * marginal steps. Prevents charging an arbitrary client amount (and the
+ * partial-step overcharge that flooring to whole steps would otherwise hide).
+ */
+function isAmountValidForTier(tier: PricingTier, amountCents: number): boolean {
+  const minCents = tierMinCents(tier);
+  if (amountCents < minCents) return false;
+  if (tier.type === "fixed") return amountCents === minCents;
+  const marginalCents = priceStringToCents(tier.marginalPrice);
+  if (marginalCents <= 0) return amountCents === minCents;
+  return (amountCents - minCents) % marginalCents === 0;
+}
+
+/**
+ * Re-resolve an order's tier after creation (used for its currency at charge
+ * time). Loads the device's offering and the order's slot, then picks the tier.
+ */
+async function resolveOrderTier(
+  db: ReturnType<typeof getDb>,
+  order: {
+    deviceWalletAddress: string;
+    slotId: string | null;
+    pricingTierId: string | null;
+  }
+): Promise<PricingTier | null> {
+  if (!order.pricingTierId) return null;
+  const [device] = await db
+    .select({ offeringId: vendorDevices.vendorOfferingId })
+    .from(vendorDevices)
+    .where(eq(vendorDevices.walletAddress, order.deviceWalletAddress))
+    .limit(1);
+  if (!device) return null;
+  const [offering] = await db
+    .select({ pricingTiers: vendorOfferings.pricingTiers })
+    .from(vendorOfferings)
+    .where(eq(vendorOfferings.id, device.offeringId))
+    .limit(1);
+  let slotTier: unknown = null;
+  if (order.slotId) {
+    const [s] = await db
+      .select({ pricingTier: vendorDeviceSlots.pricingTier })
+      .from(vendorDeviceSlots)
+      .where(eq(vendorDeviceSlots.id, order.slotId))
+      .limit(1);
+    slotTier = s?.pricingTier ?? null;
+  }
+  return pickOrderTier(
+    (offering?.pricingTiers as PricingTier[]) ?? [],
+    slotTier,
+    order.pricingTierId
+  );
+}
 
 /** Create an authorization for an order and return a PiCommand ready to relay */
 async function createAuthorizationForOrder(
@@ -133,7 +210,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     return c.json(errorResponse("Device not found or inactive"), 404);
   }
 
-  // Get the offering's pricing tiers
+  // Load the offering (its pricing-tier menu) and the model (payment rules).
   const [offering] = await db
     .select()
     .from(vendorOfferings)
@@ -144,29 +221,30 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     return c.json(errorResponse("Offering not found"), 404);
   }
 
-  // Find the matching pricing tier
-  const tiers = offering.pricingTiers as PricingTier[];
-  const tier = tiers.find(t => t.id === pricingTierId);
-  if (!tier) {
-    return c.json(errorResponse("Pricing tier not found"), 404);
-  }
+  const [model] = await db
+    .select({ payment: vendorModels.payment })
+    .from(vendorModels)
+    .where(eq(vendorModels.id, offering.vendorModelId))
+    .limit(1);
 
-  // Validate amount
-  const minCents = tierMinCents(tier);
-
-  if (amountCents < minCents) {
+  // Pay-at-end (two-phase, e.g. lockers) isn't implemented: the only payment
+  // path charges up front, so reject rather than silently charge at start.
+  if (model?.payment === "atEnd") {
     return c.json(
-      errorResponse(
-        `Amount ${amountCents} is less than minimum price ${minCents}`
-      ),
+      errorResponse("This device is not available for purchase yet"),
       400
     );
   }
 
-  // Validate slot if provided
+  // Load the slot once (if given): used both for its custom price and the
+  // availability check below.
+  let slot: { id: string; pricingTier: unknown } | undefined;
   if (slotId) {
-    const [slot] = await db
-      .select()
+    const [row] = await db
+      .select({
+        id: vendorDeviceSlots.id,
+        pricingTier: vendorDeviceSlots.pricingTier,
+      })
       .from(vendorDeviceSlots)
       .where(
         and(
@@ -176,22 +254,49 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
       )
       .limit(1);
 
-    if (!slot) {
+    if (!row) {
       return c.json(errorResponse("Slot not found"), 404);
     }
+    slot = row;
+  }
 
-    // Check slot availability. A slot is "in use" only by a live order: one
-    // that's RUNNING, or pre-running (CREATED/PAID/AUTHORIZED) and updated
-    // recently. Pre-running orders that got stuck (never paid, or activation
-    // failed after payment) auto-release after the staleness window so a slot
-    // is never blocked forever.
+  // Resolve the tier: an offering-menu tier, or (for a custom-priced slot) the
+  // slot's own embedded tier.
+  const tiers = offering.pricingTiers as PricingTier[];
+  const tier = pickOrderTier(tiers, slot?.pricingTier ?? null, pricingTierId);
+  if (!tier) {
+    return c.json(errorResponse("Pricing tier not found"), 404);
+  }
+
+  // Validate the amount against the tier: no more than the sanity ceiling, and
+  // a value the tier can actually produce (the server never charges an
+  // arbitrary client-supplied amount).
+  if (amountCents > MAX_ORDER_AMOUNT_CENTS) {
+    return c.json(
+      errorResponse(`Amount exceeds the maximum of ${MAX_ORDER_AMOUNT_CENTS}`),
+      400
+    );
+  }
+  if (!isAmountValidForTier(tier, amountCents)) {
+    return c.json(
+      errorResponse(`Amount ${amountCents} is not valid for this pricing tier`),
+      400
+    );
+  }
+
+  // Check slot availability (slot already loaded). A slot is "in use" only by a
+  // live order: RUNNING, or pre-running (CREATED/PAID/AUTHORIZED) and updated
+  // recently. Pre-running orders that got stuck (never paid, or activation
+  // failed after payment) auto-release after the staleness window so a slot is
+  // never blocked forever.
+  if (slot) {
     const staleCutoff = new Date(Date.now() - SLOT_HOLD_STALE_MS);
     const [activeOrder] = await db
       .select({ id: orders.id })
       .from(orders)
       .where(
         and(
-          eq(orders.slotId, slotId),
+          eq(orders.slotId, slot.id),
           or(
             eq(orders.status, "RUNNING"),
             and(
@@ -304,8 +409,13 @@ buyerOrders.post(
     }
 
     try {
+      // Charge in the tier's currency, not a hardcoded one.
+      const tier = await resolveOrderTier(db, order);
+      const currency = (tier?.currencyCode ?? "USD").toLowerCase();
+
       const paymentIntent = await createPaymentIntent(
         order.amountCents,
+        currency,
         {
           orderId: order.id,
           deviceWalletAddress: order.deviceWalletAddress,
